@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Miss Dior — Takeover</title>
+<link rel="icon" href="data:," />
+
+<style>
+  /* ---------------------------------------------------------------
+     STAGE PROPORTIONS
+     Everything is authored against the 1920x1080 comp in Layout.png
+     and expressed in vw so the whole takeover scales with the
+     viewport instead of reflowing. Measured off Layout.png:
+       left rail   x    0 - 490    ->  484 (= left.mp4 native width)
+       content     x  518 - 1401   ->  884, centred on 960
+       right rail  x 1418 - 1919   ->  484 (= right.mp4 native width)
+       masthead    1920 x 230, full width
+     At the reference 1280px screen that gives 322 | 589 | 322.
+     --------------------------------------------------------------- */
+  :root {
+    --rail-w:    25.2083vw;  /* 484 / 1920 */
+    --content-w: 46.0417vw;  /* 884 / 1920 */
+    --banner-h:  11.9792vw;  /* 230 / 1920 */
+    --page-bg:   #f6f5f6;
+    --serif:     'Nyght Serif', 'Didot', Georgia, 'Times New Roman', serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto;
+    overscroll-behavior: none;
+  }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    font-family: var(--serif);
+    /* Hide the native scrollbar so the takeover reads edge-to-edge.
+       Scrolling itself is untouched. */
+    scrollbar-width: none;
+  }
+  body::-webkit-scrollbar { display: none; }
+
+  /* ---------------------------------------------------------------
+     FIXED AD FRAME — masthead + two rails. These never move; the
+     content column scrolls through the gap between them.
+     --------------------------------------------------------------- */
+  .banner {
+    /* Scrolls up with the page so it doesn't obscure the rails on scroll.
+       Width is explicitly 100% of the viewport so it spans both rails. */
+    position: relative;
+    width: 100vw;
+    height: var(--banner-h);
+    z-index: 30;
+    background: var(--page-bg);
+  }
+  .banner img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    display: block;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  /* Flex row so rails and content sit side-by-side in normal flow.
+     Rails are sticky so they scroll up with the banner, then pin at top. */
+  .frame {
+    display: flex;
+    align-items: flex-start;
+  }
+
+  .rail {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    width: var(--rail-w);
+    flex-shrink: 0;
+    z-index: 20;
+    overflow: hidden;
+    background: var(--page-bg);
+  }
+
+  .rail video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center;
+    display: block;
+    pointer-events: none;
+  }
+
+  /* "Mehr erfahren" pill — centred in each rail, sitting ~4% off the
+     bottom, matching Button.png (x 115-378, y 955-1040 @ 1920x1080). */
+  .cta {
+    position: absolute;
+    left: 50%;
+    bottom: 4.6%;
+    transform: translateX(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 13.7vw;      /* 263 / 1920 */
+    padding: 1.15vw 1.9vw;
+    background: #fff;
+    color: #000;
+    font-family: var(--serif);
+    font-size: 1.46vw;      /* ~28px @ 1920 */
+    line-height: 1;
+    letter-spacing: 0.01em;
+    text-decoration: none;
+    white-space: nowrap;
+    border-radius: 0.42vw;
+    box-shadow: 0 0.5vw 1.4vw rgba(0, 0, 0, 0.10),
+                0 0.1vw 0.3vw rgba(0, 0, 0, 0.06);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .cta:hover {
+    transform: translateX(-50%) translateY(-0.15vw);
+    box-shadow: 0 0.8vw 2vw rgba(0, 0, 0, 0.14),
+                0 0.1vw 0.3vw rgba(0, 0, 0, 0.06);
+  }
+
+  /* ---------------------------------------------------------------
+     SCROLLING CONTENT COLUMN — the publisher page mock. This is the
+     only thing that actually moves; its scroll progress drives both
+     rail videos.
+     --------------------------------------------------------------- */
+  .content {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    z-index: 10;
+  }
+  .content img {
+    width: 100%;
+    height: auto;
+    display: block;
+    background: #fff;
+    box-shadow: 0 0 2vw rgba(0, 0, 0, 0.07);
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+
+</style>
+</head>
+
+<body>
+
+  <header class="banner">
+    <img src="top.png" alt="Miss Dior" />
+  </header>
+
+  <div class="frame">
+
+  <aside class="rail rail--left">
+    <video id="vidLeft" src="left.mp4" muted playsinline preload="auto"
+           disablepictureinpicture></video>
+    <a class="cta" href="#" target="_blank" rel="noopener">Mehr erfahren</a>
+  </aside>
+
+  <main class="content">
+    <img src="content.png" alt="" />
+  </main>
+
+  <aside class="rail rail--right">
+    <video id="vidRight" src="right.mp4" muted playsinline preload="auto"
+           disablepictureinpicture></video>
+    <a class="cta" href="#" target="_blank" rel="noopener">Mehr erfahren</a>
+  </aside>
+
+  </div><!-- /.frame -->
+
+<script>
+(function () {
+  'use strict';
+
+  /* =================================================================
+     SCROLL-SCRUBBED VIDEO
+
+     Scroll position maps linearly onto video.currentTime, so scrolling
+     down plays forward and scrolling up runs it backwards. There is no
+     playback at all — every frame shown is a seek.
+
+     The displayed time is eased toward the scroll target inside a rAF
+     loop rather than set directly on the scroll event. Two reasons:
+     wheel events fire in coarse jumps that would look steppy, and it
+     lets us throttle seeks to roughly one per frame instead of one per
+     event.
+
+     NOTE ON SOURCE FILES: left.mp4 / right.mp4 currently carry only 10
+     keyframes across 300 frames. Every seek has to decode from the
+     nearest I-frame, which is visibly chunky. Re-encode all-intra
+     before this feels right:
+       ffmpeg -i left.mp4 -c:v libx264 -g 1 -crf 20 -an left_scrub.mp4
+     ================================================================= */
+
+  var EASE      = 0.14;    // 0-1, higher = tighter tracking, lower = smoother
+  var SNAP      = 0.0004;  // progress delta below which we snap to target
+  var SEEK_EPS  = 1 / 50;  // don't re-seek for sub-frame differences
+
+  var videos   = [document.getElementById('vidLeft'),
+                  document.getElementById('vidRight')];
+  var duration = 0;
+  var current  = 0;
+  var ready    = false;
+
+  function scrollProgress() {
+    var max = document.documentElement.scrollHeight - window.innerHeight;
+    if (max <= 0) return 0;
+    var p = window.scrollY / max;
+    return p < 0 ? 0 : p > 1 ? 1 : p;
+  }
+
+  function onMeta() {
+    // Shortest duration wins so neither track runs off its own end.
+    var ds = videos
+      .map(function (v) { return v.duration; })
+      .filter(function (d) { return isFinite(d) && d > 0; });
+    if (!ds.length) return;
+    duration = Math.min.apply(Math, ds);
+    ready = true;
+  }
+
+  videos.forEach(function (v) {
+    v.pause();
+    v.addEventListener('loadedmetadata', onMeta);
+    // Belt and braces: some browsers autoplay muted inline video.
+    v.addEventListener('play', function () { v.pause(); });
+    if (v.readyState >= 1) onMeta();
+  });
+
+  function tick() {
+    if (ready) {
+      var target = scrollProgress();
+      var delta  = target - current;
+
+      if (Math.abs(delta) < SNAP) current = target;
+      else current += delta * EASE;
+
+      var t = current * duration;
+      // Keep a hair off the very end — seeking to exactly duration can
+      // park some decoders on a blank frame.
+      if (t > duration - 0.02) t = duration - 0.02;
+      if (t < 0) t = 0;
+
+      for (var i = 0; i < videos.length; i++) {
+        var v = videos[i];
+        if (v.readyState >= 2 && Math.abs(v.currentTime - t) > SEEK_EPS) {
+          v.currentTime = t;
+        }
+      }
+    }
+    requestAnimationFrame(tick);
+  }
+
+  requestAnimationFrame(tick);
+})();
+</script>
+</body>
+</html>
