@@ -1,29 +1,17 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Miss Dior — Takeover</title>
+<title>BYD — Takeover</title>
 <link rel="icon" href="data:," />
 
 <style>
-  /* ---------------------------------------------------------------
-     STAGE PROPORTIONS
-     Everything is authored against the 1920x1080 comp in Layout.png
-     and expressed in vw so the whole takeover scales with the
-     viewport instead of reflowing. Measured off Layout.png:
-       left rail   x    0 - 483    ->  484 (= left.mp4 native width)
-       content     x  484 - 1435   ->  952 (= center spec width)
-       right rail  x 1436 - 1919   ->  484 (= right.mp4 native width)
-       masthead    1920 x 230, full width
-     At the reference 1280px screen that gives 322 | 635 | 322.
-     --------------------------------------------------------------- */
   :root {
     --rail-w:    25.2083vw;  /* 484 / 1920 */
     --content-w: 49.5833vw;  /* 952 / 1920 */
     --banner-h:  11.9792vw;  /* 230 / 1920 */
     --page-bg:   #f6f5f6;
-    --serif:     'Nyght Serif', 'Didot', Georgia, 'Times New Roman', serif;
   }
 
   * { box-sizing: border-box; }
@@ -36,20 +24,11 @@
   body {
     margin: 0;
     background: var(--page-bg);
-    font-family: var(--serif);
-    /* Hide the native scrollbar so the takeover reads edge-to-edge.
-       Scrolling itself is untouched. */
     scrollbar-width: none;
   }
   body::-webkit-scrollbar { display: none; }
 
-  /* ---------------------------------------------------------------
-     FIXED AD FRAME — masthead + two rails. These never move; the
-     content column scrolls through the gap between them.
-     --------------------------------------------------------------- */
   .banner {
-    /* Scrolls up with the page so it doesn't obscure the rails on scroll.
-       Width is explicitly 100% of the viewport so it spans both rails. */
     position: relative;
     width: 100vw;
     height: var(--banner-h);
@@ -65,8 +44,6 @@
     -webkit-user-drag: none;
   }
 
-  /* Flex row so rails and content sit side-by-side in normal flow.
-     Rails are sticky so they scroll up with the banner, then pin at top. */
   .frame {
     display: flex;
     align-items: flex-start;
@@ -94,12 +71,10 @@
     pointer-events: none;
   }
 
-  /* "Mehr erfahren" pill — centred in each rail.
-     Comp: 106 × 32 px @ 1920 × 1080, positioned at y 1000. */
   .cta {
     position: absolute;
     left: 50%;
-    bottom: 5.93%;          /* (1080 - 1000 - 16) / 1080 */
+    bottom: 5.93%;          /* y ≈ 999 in 1080 comp */
     transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
@@ -108,8 +83,7 @@
     height: 1.6667vw;       /* 32 / 1920 */
     background: #fff;
     color: #000;
-    font-family: var(--serif);
-    font-size: 0.6771vw;    /* ~13px @ 1920 */
+    font-size: 0.6771vw;
     line-height: 1;
     letter-spacing: 0.01em;
     text-decoration: none;
@@ -125,17 +99,13 @@
                 0 0.1vw 0.3vw rgba(0, 0, 0, 0.06);
   }
 
-  /* ---------------------------------------------------------------
-     SCROLLING CONTENT COLUMN — the publisher page mock. This is the
-     only thing that actually moves; its scroll progress drives both
-     rail videos.
-     --------------------------------------------------------------- */
   .content {
     flex: 1;
     min-width: 0;
     position: relative;
     z-index: 10;
   }
+
   .content img {
     width: 100%;
     height: auto;
@@ -145,15 +115,13 @@
     user-select: none;
     -webkit-user-drag: none;
   }
-
-
 </style>
 </head>
 
 <body>
 
   <header class="banner">
-    <img src="top.png" alt="Miss Dior" />
+    <img src="top.png" alt="BYD" />
   </header>
 
   <div class="frame">
@@ -161,7 +129,7 @@
   <aside class="rail rail--left">
     <video id="vidLeft" src="left.mp4" muted playsinline preload="auto"
            disablepictureinpicture></video>
-    <span class="cta">Mehr erfahren</span>
+    <span class="cta">Learn more</span>
   </aside>
 
   <main class="content">
@@ -171,7 +139,7 @@
   <aside class="rail rail--right">
     <video id="vidRight" src="right.mp4" muted playsinline preload="auto"
            disablepictureinpicture></video>
-    <span class="cta">Mehr erfahren</span>
+    <span class="cta">Learn more</span>
   </aside>
 
   </div><!-- /.frame -->
@@ -180,29 +148,9 @@
 (function () {
   'use strict';
 
-  /* =================================================================
-     SCROLL-SCRUBBED VIDEO
-
-     Scroll position maps linearly onto video.currentTime, so scrolling
-     down plays forward and scrolling up runs it backwards. There is no
-     playback at all — every frame shown is a seek.
-
-     The displayed time is eased toward the scroll target inside a rAF
-     loop rather than set directly on the scroll event. Two reasons:
-     wheel events fire in coarse jumps that would look steppy, and it
-     lets us throttle seeks to roughly one per frame instead of one per
-     event.
-
-     NOTE ON SOURCE FILES: left.mp4 / right.mp4 currently carry only 10
-     keyframes across 300 frames. Every seek has to decode from the
-     nearest I-frame, which is visibly chunky. Re-encode all-intra
-     before this feels right:
-       ffmpeg -i left.mp4 -c:v libx264 -g 1 -crf 20 -an left_scrub.mp4
-     ================================================================= */
-
-  var EASE      = 0.14;    // 0-1, higher = tighter tracking, lower = smoother
-  var SNAP      = 0.0004;  // progress delta below which we snap to target
-  var SEEK_EPS  = 1 / 50;  // don't re-seek for sub-frame differences
+  var EASE      = 0.14;
+  var SNAP      = 0.0004;
+  var SEEK_EPS  = 1 / 50;
 
   var videos   = [document.getElementById('vidLeft'),
                   document.getElementById('vidRight')];
@@ -218,7 +166,6 @@
   }
 
   function onMeta() {
-    // Shortest duration wins so neither track runs off its own end.
     var ds = videos
       .map(function (v) { return v.duration; })
       .filter(function (d) { return isFinite(d) && d > 0; });
@@ -230,7 +177,6 @@
   videos.forEach(function (v) {
     v.pause();
     v.addEventListener('loadedmetadata', onMeta);
-    // Belt and braces: some browsers autoplay muted inline video.
     v.addEventListener('play', function () { v.pause(); });
     if (v.readyState >= 1) onMeta();
   });
@@ -244,8 +190,6 @@
       else current += delta * EASE;
 
       var t = current * duration;
-      // Keep a hair off the very end — seeking to exactly duration can
-      // park some decoders on a blank frame.
       if (t > duration - 0.02) t = duration - 0.02;
       if (t < 0) t = 0;
 
