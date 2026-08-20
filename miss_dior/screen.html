@@ -92,22 +92,22 @@
     pointer-events: none;
   }
 
-  /* "Mehr erfahren" pill — centred in each rail, sitting ~4% off the
-     bottom, matching Button.png (x 115-378, y 955-1040 @ 1920x1080). */
+  /* "Mehr erfahren" pill — centred in each rail.
+     Comp: 106 × 32 px @ 1920 × 1080, positioned at y 1000. */
   .cta {
     position: absolute;
     left: 50%;
-    bottom: 4.6%;
+    bottom: 5.93%;          /* (1080 - 1000 - 16) / 1080 */
     transform: translateX(-50%);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    min-width: 13.7vw;      /* 263 / 1920 */
-    padding: 1.15vw 1.9vw;
+    width: 5.5208vw;        /* 106 / 1920 */
+    height: 1.6667vw;       /* 32 / 1920 */
     background: #fff;
     color: #000;
     font-family: var(--serif);
-    font-size: 1.46vw;      /* ~28px @ 1920 */
+    font-size: 0.6771vw;    /* ~13px @ 1920 */
     line-height: 1;
     letter-spacing: 0.01em;
     text-decoration: none;
@@ -159,7 +159,7 @@
   <aside class="rail rail--left">
     <video id="vidLeft" src="left.mp4" muted playsinline preload="auto"
            disablepictureinpicture></video>
-    <a class="cta" href="#" target="_blank" rel="noopener">Mehr erfahren</a>
+    <span class="cta">Mehr erfahren</span>
   </aside>
 
   <main class="content">
@@ -169,7 +169,7 @@
   <aside class="rail rail--right">
     <video id="vidRight" src="right.mp4" muted playsinline preload="auto"
            disablepictureinpicture></video>
-    <a class="cta" href="#" target="_blank" rel="noopener">Mehr erfahren</a>
+    <span class="cta">Mehr erfahren</span>
   </aside>
 
   </div><!-- /.frame -->
