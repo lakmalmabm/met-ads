@@ -150,6 +150,7 @@
     height: var(--video-h);
     margin: 0 auto;
     background: #000;
+    overflow: hidden;
   }
 
   .ad video {
@@ -157,7 +158,30 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
+    transform: scale(1.05);
+    will-change: transform;
   }
+
+  /* iOS gyro permission prompt */
+  .gyro-prompt {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+    font-size: 13px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.3s;
+  }
+  .gyro-prompt.hidden { opacity: 0; pointer-events: none; }
 
   .ad__placeholder {
     display: flex;
@@ -333,10 +357,11 @@
   <!-- ============================================================
        STICKY VIDEO — 768 × 1152
        ============================================================ -->
-  <div class="ad">
+  <div class="ad" id="ad">
     <video id="video" preload="auto" playsinline muted loop autoplay>
       <source src="/miss_dior_mobile/video.mp4" type="video/mp4" />
     </video>
+    <div class="gyro-prompt" id="gyro-prompt">Tap to enable motion</div>
   </div>
 
   <!-- ============================================================
@@ -499,6 +524,14 @@
   'use strict';
 
   var video = document.getElementById('video');
+  var prompt = document.getElementById('gyro-prompt');
+  var EASE = 0.08;
+  var MAX_SHIFT = 10; /* px */
+  var targetX = 0, targetY = 0;
+  var currentX = 0, currentY = 0;
+  var gyroActive = false;
+
+  /* Video error fallback */
   video.addEventListener('error', function () {
     var ph = document.createElement('div');
     ph.className = 'ad__placeholder';
@@ -506,6 +539,61 @@
     video.parentNode.appendChild(ph);
     video.style.display = 'none';
   }, true);
+
+  /* --- Gyro tilt ----------------------------------------------- */
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function onOrientation(e) {
+    /* beta = front-back (-180..180), gamma = left-right (-90..90) */
+    var gamma = e.gamma || 0;
+    var beta = e.beta || 0;
+    /* Normalise: phone upright ≈ beta 90, so offset by 90 */
+    beta = beta - 90;
+    targetX = clamp(gamma / 30, -1, 1) * MAX_SHIFT;
+    targetY = clamp(beta / 30, -1, 1) * MAX_SHIFT;
+  }
+
+  function startGyro() {
+    window.addEventListener('deviceorientation', onOrientation);
+    gyroActive = true;
+    prompt.classList.add('hidden');
+  }
+
+  /* rAF loop — ease toward target */
+  function tick() {
+    if (gyroActive) {
+      currentX += (targetX - currentX) * EASE;
+      currentY += (targetY - currentY) * EASE;
+      video.style.transform =
+        'scale(1.05) translate(' + currentX.toFixed(2) + 'px, ' + currentY.toFixed(2) + 'px)';
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* --- Permission handling ------------------------------------ */
+  var needsPermission = typeof DeviceOrientationEvent !== 'undefined' &&
+                        typeof DeviceOrientationEvent.requestPermission === 'function';
+
+  if (needsPermission) {
+    /* iOS 13+ — must request on user gesture */
+    prompt.addEventListener('click', function () {
+      DeviceOrientationEvent.requestPermission().then(function (state) {
+        if (state === 'granted') startGyro();
+        else prompt.classList.add('hidden');
+      }).catch(function () {
+        prompt.classList.add('hidden');
+      });
+    });
+  } else if ('DeviceOrientationEvent' in window) {
+    /* Android / other — just start, hide prompt */
+    prompt.classList.add('hidden');
+    startGyro();
+  } else {
+    /* Desktop — no gyro, hide prompt */
+    prompt.classList.add('hidden');
+  }
+
 })();
 </script>
 </body>
