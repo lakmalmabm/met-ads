@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(identify /Users/buddhikalakmal/Documents/projects/ads/byd/top.png)",
+      "Bash(sips -g pixelWidth -g pixelHeight /Users/buddhikalakmal/Documents/projects/ads/byd/top.png)",
+      "WebFetch(domain:test.met-ads.com)"
+    ]
+  }
+}
