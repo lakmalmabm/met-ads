@@ -586,8 +586,8 @@
 <script type="importmap">
 {
   "imports": {
-    "three": "./vendor/three.module.js",
-    "three/addons/": "./vendor/jsm/"
+    "three": "/miss_dior_mobile_split/vendor/three.module.js",
+    "three/addons/": "/miss_dior_mobile_split/vendor/jsm/"
   }
 }
 </script>
@@ -634,7 +634,7 @@ const LIGHTS=[
   {name:'Area.005',W:5.0,  size:[1.510525,1.510525],m:[[1.5105254650115967,0,0,-0.15965536236763],[0,-0.09068802744150162,-1.507800579071045,0.0783577412366867],[0,1.5078004598617554,-0.09068803489208221,-0.987615704536438],[0,0,0,1]]}
 ];
 
-const HDRI_URL='./studio_small_08_2k.hdr', HDRI_ROT_DEG=16.8, ENV_INTENSITY=1.0;
+const HDRI_URL='/miss_dior_mobile_split/studio_small_08_2k.hdr', HDRI_ROT_DEG=16.8, ENV_INTENSITY=1.0;
 const BACKDROP=[[0.000,'#d9dbdf'],[0.125,'#d6d8d9'],[0.250,'#cfcfd1'],[0.375,'#cbcbcd'],
                 [0.500,'#cacacc'],[0.625,'#c4c4c6'],[0.750,'#bbbbbd'],[0.875,'#afafb4'],
                 [1.000,'#abacb2']];
@@ -648,12 +648,12 @@ const MATERIAL_OVERRIDES={
   'glass.004':{color:lin(1,1,1),roughness:0.0,metalness:0,transmission:1,ior:1.45,thickness:0.30},
   'glass.005':{color:lin(1,0.9041,0.9167),roughness:0.0,metalness:0,transmission:1,ior:2.06,thickness:0.16},
   'with pattern.002':{color:lin(1,1,1),roughness:0.1722,metalness:0,transmission:1,ior:1.45,
-                      thickness:0.30,bumpMap:'./tex/houndstooth.png',bumpScale:0.375},
+                      thickness:0.30,bumpMap:'/miss_dior_mobile_split/tex/houndstooth.png',bumpScale:0.375},
   'Water 02.002':{color:lin(1,0.0446,0.2907),roughness:0.0,metalness:0,transmission:1,ior:1.45,
                   thickness:0.25,attenuationColor:lin(1,0.0446,0.2907),attenuationDistance:0.5},
   'Material.020':{color:lin(0.8,0.8,0.8),metalness:1.0,roughness:0.10},
   'Ribbon.001':{color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,
-                normalMap:'./tex/ribbon_normal.png'},
+                normalMap:'/miss_dior_mobile_split/tex/ribbon_normal.png'},
   'RIBBONZ':{color:lin(0.011,0.0092,0.0092),metalness:0,roughness:0.55},
   'Material.026':{color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667},
   'Material.029':{color:lin(0.01,0.01,0.01),metalness:0,roughness:0.36}
@@ -780,7 +780,7 @@ function applyMaterialOverrides(root){
 }
 
 /* ---- loaders: KTX2 + meshopt for the packed flower assets ---- */
-const ktx2=new KTX2Loader().setTranscoderPath('./vendor/jsm/libs/basis/').detectSupport(renderer);
+const ktx2=new KTX2Loader().setTranscoderPath('/miss_dior_mobile_split/vendor/jsm/libs/basis/').detectSupport(renderer);
 const gltfLoader=new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
 
 const stats={}, progress={}, loaded={};
@@ -814,9 +814,9 @@ function countTris(root){
 let mixer=null, action=null;
 const clock=new THREE.Clock();
 
-for(const part of [{key:'panel',url:'./parts/panel.glb'},
-                   {key:'bottle',url:'./parts/bottle.glb'},
-                   {key:'flowers',url:'./parts/flowers.glb'}]){
+for(const part of [{key:'panel',url:'https://github.com/lakmalmabm/met-ads/raw/main/miss_dior_mobile_split/parts/panel.glb'},
+                   {key:'bottle',url:'https://github.com/lakmalmabm/met-ads/raw/main/miss_dior_mobile_split/parts/bottle.glb'},
+                   {key:'flowers',url:'https://github.com/lakmalmabm/met-ads/raw/main/miss_dior_mobile_split/parts/flowers.glb'}]){
   const t=performance.now();
   gltfLoader.load(part.url,g=>{
     applyMaterialOverrides(g.scene);
@@ -906,7 +906,7 @@ window.__ad={
       img.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;'+
         'transform:scale(1.08);z-index:11;pointer-events:none;';
       ad.appendChild(img);}
-    img.src='./ref/frame_'+frame+'.png'; img.style.opacity=opacity;
+    img.src='/miss_dior_mobile_split/ref/frame_'+frame+'.png'; img.style.opacity=opacity;
     return this.scrub(frame/30);
   },
   abOff(){const i=document.getElementById('__ref');if(i)i.remove();this.motion(true);return this.play();}
