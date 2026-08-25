@@ -1,0 +1,445 @@
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+/* ===================================================================
+   BLENDER PARITY
+   Source: Miss Dior_Mobile_Mobile Takeover_3.blend (Blender 5.2 LTS,
+   Cycles, 1080x1920, 30fps, frames 0-450). Read off the live scene -
+   do not hand-edit without re-reading Blender.
+   =================================================================== */
+
+/* Blender is Z-up, glTF/three are Y-up. The exporter already rotated the
+   MODEL, so the camera and lights must be rotated to match:
+       (x, y, z)_blender  ->  (x, z, -y)_three
+   a -90 deg rotation about X. Applied to a full matrix it converts each
+   basis vector too, so a light's local -Z (the face it emits from, same
+   convention in both packages) keeps its meaning. */
+const B2T = new THREE.Matrix4().set(1,0,0,0,  0,0,1,0,  0,-1,0,0,  0,0,0,1);
+function blenderMatrix(r){
+  const m = new THREE.Matrix4().set(
+    r[0][0],r[0][1],r[0][2],r[0][3], r[1][0],r[1][1],r[1][2],r[1][3],
+    r[2][0],r[2][1],r[2][2],r[2][3], r[3][0],r[3][1],r[3][2],r[3][3]);
+  return new THREE.Matrix4().multiplyMatrices(B2T, m);
+}
+
+const CAM = {
+  /* Blender loc (0.015296, -3.969097, -0.011073), rot XYZ (90,0,0) ->
+     converted, that is three's default orientation: on +Z, looking -Z. */
+  pos:[0.015295881778, -0.011073246598, 3.969096660614],
+  target:[0.015295881778, -0.011073246598, 0],
+  /* 90mm on a 36mm sensor, sensor_fit AUTO. AUTO maps the 36mm to the
+     LONGER render axis and the render is portrait, so 36mm is VERTICAL
+     and the horizontal sensor is 36 * 1080/1920 = 20.25mm.
+         hFOV = 2*atan(20.25/180) = 12.8376 deg   */
+  lensMM:90, sensorMM:36, renderW:1080, renderH:1920, near:0.1, far:1000
+};
+const H_FOV_RAD = 2*Math.atan((CAM.sensorMM*CAM.renderW/CAM.renderH)/(2*CAM.lensMM));
+
+/* Blender area lights are Watts; three's RectAreaLight is nits.
+   NOT 683/pi - Cycles already emits radiance in the render's own linear
+   RGB units (L = P/(A*pi)) and three renders in those same units before
+   tone mapping. The 683 lm/W luminous efficacy is a category error that
+   made every light 683x too bright. */
+const LIGHT_GAIN = 1.0;
+const W_TO_NITS  = 1/Math.PI;
+const LIGHTS = [
+  {name:'Area',    W:150.5,size:[2.290009,2.290009],m:[[2.290008783340454,9.94446954886968e-18,-1.0007170170173445e-16,-0.01010955311357975],[5.353863235432611e-18,2.2634973526000977,0.34744760394096375,1.1622482538223267],[1.004219829126486e-16,-0.34744760394096375,2.2634973526000977,3.7277026176452637],[0,0,0,1]]},
+  {name:'Area.001',W:33.3, size:[2.379771,2.285399],m:[[2.3789494037628174,-0.06004314869642258,-0.0005531621281988919,-0.05178740620613098],[0.013023633509874344,0.4978509247303009,-2.0871574878692627,0.15547463297843933],[0.06115417182445526,2.229705572128296,0.4660077691078186,0.7153764963150024],[0,0,0,1]]},
+  {name:'Area.002',W:5.0,  size:[1.510525,1.510525],m:[[0.6887286901473999,-1.2695475816726685,0.44225364923477173,0.29077789187431335],[0.9892858266830444,0.1421373337507248,-1.1326063871383667,-0.6889719367027283],[0.9103040099143982,0.8060597777366638,0.8962706327438354,0.29528161883354187],[0,0,0,1]]},
+  {name:'Area.003',W:9.1,  size:[2.617539,2.617539],m:[[1,0,0,0.015295881778001785],[0,0.010622496716678143,0.9999435544013977,1.3373398780822754],[0,-0.9999435544013977,0.010622496716678143,0.08211664110422134],[0,0,0,1]]},
+  {name:'Area.004',W:16.6, size:[0.917526,0.917526],m:[[0.7890290021896362,-0.22862040996551514,-0.40868133306503296,-0.4372585713863373],[-0.19595548510551453,0.566074550151825,-0.6949931383132935,-0.5636577010154724],[0.42531073093414307,0.684942901134491,0.4379708766937256,0.5910373330116272],[0,0,0,1]]},
+  {name:'Area.005',W:5.0,  size:[1.510525,1.510525],m:[[1.5105254650115967,0,0,-0.15965536236763],[0,-0.09068802744150162,-1.507800579071045,0.0783577412366867],[0,1.5078004598617554,-0.09068803489208221,-0.987615704536438],[0,0,0,1]]}
+];
+/* The 7th Blender light, Abstract02 (SPOT), belongs to no collection, so
+   it is not in the scene and does not light the render. Omitted. */
+
+const HDRI_URL='./studio_small_08_2k.hdr', HDRI_ROT_DEG=16.8, ENV_INTENSITY=1.0;
+const MODEL_URL='./model.glb';
+
+/* The Blender backdrop object ("Plane", Material.001) never made it into
+   the export. Faked as a vertical gradient sampled off ref/frame_392.png
+   outside the panel. It goes in as scene.background rather than a CSS
+   background specifically so it lands in the transmission render target -
+   otherwise the glass refracts an empty buffer and reads as a black hole.
+   Note it is screen-space, so it does not parallax with the tilt. */
+const BACKDROP=[[0.000,'#d9dbdf'],[0.125,'#d6d8d9'],[0.250,'#cfcfd1'],[0.375,'#cbcbcd'],
+                [0.500,'#cacacc'],[0.625,'#c4c4c6'],[0.750,'#bbbbbd'],[0.875,'#afafb4'],
+                [1.000,'#abacb2']];
+
+/* -------------------------------------------------------------------
+   MATERIAL OVERRIDES
+   The glTF exporter only reads a Principled BSDF wired STRAIGHT into
+   Material Output. This .blend defeats it in both possible ways:
+     - a node Group in the path (every bottle material, via "Mx White"
+       or the "Water.002" asset group) -> flat [0.8,0.8,0.8] default
+     - a non-Principled BSDF (Material.003 on the panel, a Glass BSDF)
+       -> opaque white, which turned a glass sheet into a solid wall
+   Material.021 (the label) is the only one wired directly, and the only
+   one that survived - hence it is deliberately absent from this table.
+   Values below are read off the actual Cycles nodes. Blender colours are
+   LINEAR, hence setRGB(..., LinearSRGBColorSpace) rather than hex.
+   ------------------------------------------------------------------- */
+const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
+
+const MATERIAL_OVERRIDES = {
+  /* Glass panel. Blender: Glass BSDF, white, roughness 0, IOR *0.84*.
+     Below 1 is deliberate - it flips the refraction and leaves a very
+     faint sheet with a bright bevelled rim. three clamps ior to
+     [1.0, 2.333], so 0.84 cannot be set. Match what you actually see -
+     normal-incidence Fresnel reflectance R0 = ((n-1)/(n+1))^2.
+     n=0.84 -> R0=0.00756; the n>1 with the same R0 is
+     (1+0.08696)/(1-0.08696) = 1.19, so the rim is identically bright.
+     thickness 0.014 is the Solidify modifier's exact thickness. */
+  'Material.003': { color:lin(1,1,1), roughness:0.0, metalness:0,
+                    transmission:1, ior:1.19, thickness:0.014 },
+
+  'glass.004': { color:lin(1,1,1), roughness:0.0, metalness:0,
+                 transmission:1, ior:1.45, thickness:0.30 },
+  /* Cap: colour (1, 0.904, 0.917), IOR 2.06 - the high IOR is what
+     gives the cap its harder, more mirror-like edge. */
+  'glass.005': { color:lin(1,0.9041,0.9167), roughness:0.0, metalness:0,
+                 transmission:1, ior:2.06, thickness:0.16 },
+  /* Houndstooth face: two mixed Glass BSDFs in Blender, approximated as
+     one transmissive surface with the pattern driving a bump. */
+  'with pattern.002': { color:lin(1,1,1), roughness:0.1722, metalness:0,
+                        transmission:1, ior:1.45, thickness:0.30,
+                        bumpMap:'./tex/houndstooth.png', bumpScale:0.375 },
+  /* The perfume itself - a Water asset group, colour (1, 0.045, 0.291).
+     This is where nearly all of the bottle's pink comes from. */
+  'Water 02.002': { color:lin(1,0.0446,0.2907), roughness:0.0, metalness:0,
+                    transmission:1, ior:1.45, thickness:0.25,
+                    attenuationColor:lin(1,0.0446,0.2907), attenuationDistance:0.5 },
+  'Material.020': { color:lin(0.8,0.8,0.8), metalness:1.0, roughness:0.10 },
+  'Ribbon.001':   { color:lin(0.0018,0.0018,0.0018), metalness:0.2909, roughness:0.9132,
+                    normalMap:'./tex/ribbon_normal.png' },
+  'RIBBONZ':      { color:lin(0.011,0.0092,0.0092), metalness:0, roughness:0.55 },
+  'Material.026': { color:lin(0.0083,0.0083,0.0083), metalness:0, roughness:0.6667 },
+  'Material.029': { color:lin(0.01,0.01,0.01),       metalness:0, roughness:0.36 }
+};
+
+/* ===================================================================
+   MOTION INPUT
+   The video build translated a flat image by +-20px: everything moved
+   the same amount, so there was no depth. The input now drives the
+   CAMERA, which gives real parallax - the flowers sit 0.5-1.5 units
+   behind the bottle, so they swing further than it does, for free.
+
+   Two things this must get right:
+   1. At rest the camera lands back EXACTLY on the pose verified against
+      Blender to 0.00075 px. Offsets apply to a stored base, never
+      accumulate onto the live camera. (Measured drift after a full
+      swing and back: 2.4e-16 world units.)
+   2. Orientation is a DELTA from wherever the phone was when tracking
+      started. Absolute beta/gamma pegs the effect at its limit the
+      moment somebody holds their phone at a natural 45 deg.
+   =================================================================== */
+const EASE = 0.08;
+let   MAX_YAW_DEG   = 3.5;
+let   MAX_PITCH_DEG = 2.5;
+let   INPUT_RANGE_DEG = 25;
+const RECENTER = 0.0016;
+const INVERT_YAW = 1, INVERT_PITCH = 1;
+
+const canvas=document.getElementById('stage');
+const prompt=document.getElementById('gyro-prompt');
+const loaderEl=document.getElementById('loader');
+const loaderText=document.getElementById('loader-text');
+const bar=document.getElementById('bar');
+const ad=document.getElementById('ad');
+
+let targetU=0,targetV=0,currentU=0,currentV=0;
+let gyroActive=false,pointerActive=false,motionEnabled=true;
+let neutralBeta=null,neutralGamma=null;
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+
+function onOrientation(e){
+  if(e.beta===null && e.gamma===null) return;
+  const beta=e.beta||0, gamma=e.gamma||0;
+  if(neutralBeta===null){ neutralBeta=beta; neutralGamma=gamma; }
+  else {
+    neutralBeta  += (beta -neutralBeta )*RECENTER;
+    neutralGamma += (gamma-neutralGamma)*RECENTER;
+  }
+  const angle=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
+  let du=gamma-neutralGamma, dv=beta-neutralBeta;
+  if(angle===90){ const t=du; du=dv; dv=-t; }
+  else if(angle===-90||angle===270){ const t=du; du=-dv; dv=t; }
+  targetU=clamp(du/INPUT_RANGE_DEG,-1,1)*INVERT_YAW;
+  targetV=clamp(dv/INPUT_RANGE_DEG,-1,1)*INVERT_PITCH;
+}
+function startGyro(){
+  window.addEventListener('deviceorientation',onOrientation);
+  gyroActive=true; prompt.classList.add('hidden');
+}
+
+/* Desktop has no gyro and this has to be previewable on a laptop, so
+   pointer position stands in for tilt. Gyro wins if both are live. */
+function onPointer(e){
+  if(gyroActive) return;
+  const r=ad.getBoundingClientRect();
+  if(!r.width||!r.height) return;
+  targetU=clamp(((e.clientX-r.left)/r.width -0.5)*2,-1,1)*INVERT_YAW;
+  targetV=clamp(((e.clientY-r.top )/r.height-0.5)*2,-1,1)*-INVERT_PITCH;
+  pointerActive=true;
+}
+window.addEventListener('pointermove',onPointer,{passive:true});
+window.addEventListener('pointerleave',()=>{ if(!gyroActive){targetU=0;targetV=0;} },{passive:true});
+
+const needsPermission = typeof DeviceOrientationEvent!=='undefined' &&
+                        typeof DeviceOrientationEvent.requestPermission==='function';
+if(needsPermission){
+  /* iOS 13+ only grants this from inside a user gesture. */
+  prompt.addEventListener('click',()=>{
+    DeviceOrientationEvent.requestPermission()
+      .then(s=>{ if(s==='granted') startGyro(); else prompt.classList.add('hidden'); })
+      .catch(()=>prompt.classList.add('hidden'));
+  });
+} else if('DeviceOrientationEvent' in window){ prompt.classList.add('hidden'); startGyro(); }
+else { prompt.classList.add('hidden'); }
+
+/* ===================================================================
+   SCENE
+   =================================================================== */
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+/* Blender: view transform Filmic, look Medium High Contrast, exposure 0.
+   ACESFilmic is the nearest of three's built-ins - AgX matches Blender's
+   AgX, not Filmic. */
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.0;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const scene=new THREE.Scene();
+(function backdrop(){
+  const c=document.createElement('canvas'); c.width=4; c.height=512;
+  const ctx=c.getContext('2d');
+  const g=ctx.createLinearGradient(0,0,0,512);
+  for(const [stop,col] of BACKDROP) g.addColorStop(stop,col);
+  ctx.fillStyle=g; ctx.fillRect(0,0,4,512);
+  const tex=new THREE.CanvasTexture(c);
+  tex.colorSpace=THREE.SRGBColorSpace;
+  scene.background=tex;
+})();
+
+const camera=new THREE.PerspectiveCamera(50,1,CAM.near,CAM.far);
+camera.position.set(...CAM.pos);
+camera.lookAt(...CAM.target);
+
+/* ---- orbit rig ----
+   The verified pose is captured once as a spherical offset from the
+   look-at target and every frame rebuilds the camera from it. Nothing
+   accumulates, so u=v=0 restores the Blender-matched pose exactly. */
+const PIVOT=new THREE.Vector3(...CAM.target);
+const BASE_SPH=new THREE.Spherical().setFromVector3(new THREE.Vector3(...CAM.pos).sub(PIVOT));
+const _sph=new THREE.Spherical(), _off=new THREE.Vector3();
+function applyCameraTilt(u,v){
+  /* Because we keep looking at PIVOT, anything at that depth barely
+     moves while anything behind it swings wide - that is the parallax. */
+  _sph.set(BASE_SPH.radius,
+           BASE_SPH.phi   - v*THREE.MathUtils.degToRad(MAX_PITCH_DEG),
+           BASE_SPH.theta + u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
+  camera.position.copy(PIVOT).add(_off.setFromSpherical(_sph));
+  camera.lookAt(PIVOT);
+}
+
+/* RectAreaLight needs its BRDF lookup tables uploaded once, and only
+   affects MeshStandard/MeshPhysical - which is what GLTFLoader makes.
+   It cannot cast shadows in three; the contact shadow under the bottle
+   has to come from the .glb's baked maps. */
+RectAreaLightUniformsLib.init();
+const rig=[], pos=new THREE.Vector3(), quat=new THREE.Quaternion(), scl=new THREE.Vector3();
+for(const L of LIGHTS){
+  const area=L.size[0]*L.size[1];
+  const light=new THREE.RectAreaLight(0xffffff,(L.W/area)*W_TO_NITS*LIGHT_GAIN,L.size[0],L.size[1]);
+  blenderMatrix(L.m).decompose(pos,quat,scl);
+  light.position.copy(pos);
+  light.quaternion.copy(quat);          /* scale is baked into size above */
+  light.name=L.name;
+  light.userData.baseIntensity=light.intensity;
+  rig.push(light); scene.add(light);
+}
+
+/* World "EasyHDR": studio_small_08_2k.exr was packed in the .blend
+   (its original path is a dead D:/ Windows path); unpacked here as
+   Radiance .hdr. Mapping node rotates Z by 16.8 deg -> Y in three. */
+new RGBELoader().load(HDRI_URL,tex=>{
+  tex.mapping=THREE.EquirectangularReflectionMapping;
+  scene.environment=tex;
+  scene.environmentIntensity=ENV_INTENSITY;
+  scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(HDRI_ROT_DEG),0);
+},undefined,err=>console.warn('[ad] HDRI failed:',err));
+
+/* ---- material overrides ---- */
+const texLoader=new THREE.TextureLoader(), texCache={};
+function getTex(url){
+  if(!texCache[url]){
+    const t=texLoader.load(url);
+    t.wrapS=t.wrapT=THREE.RepeatWrapping;
+    t.flipY=false;                        /* glTF UV convention */
+    texCache[url]=t;
+  }
+  return texCache[url];
+}
+function applyMaterialOverrides(root){
+  const hit=[];
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    const mats=Array.isArray(o.material)?o.material:[o.material];
+    const next=mats.map(m=>{
+      const spec=MATERIAL_OVERRIDES[m.name];
+      if(!spec) return m;
+      const p={name:m.name, side:m.side, transparent:!!spec.transmission};
+      for(const [k,v] of Object.entries(spec)){
+        if(k==='bumpMap')        p.bumpMap=getTex(v);
+        else if(k==='normalMap') p.normalMap=getTex(v);
+        else                     p[k]=v;
+      }
+      hit.push(m.name);
+      return new THREE.MeshPhysicalMaterial(p);
+    });
+    o.material=Array.isArray(o.material)?next:next[0];
+  });
+  return hit;
+}
+
+/* ---- model + animation ---- */
+let mixer=null, action=null;
+const clock=new THREE.Clock();
+
+new GLTFLoader().load(MODEL_URL,
+  gltf=>{
+    const hit=applyMaterialOverrides(gltf.scene);
+    console.log('[ad] materials overridden:',hit.join(', '));
+    scene.add(gltf.scene);
+    if(gltf.animations.length){
+      /* One clip, "Scene", 15.0s / 54 channels - the same animation the
+         old video.mp4 carried, so looping it is a drop-in swap. */
+      mixer=new THREE.AnimationMixer(gltf.scene);
+      action=mixer.clipAction(gltf.animations[0]);
+      action.setLoop(THREE.LoopRepeat,Infinity);
+      action.play();
+    }
+    loaderEl.classList.add('hidden');
+    console.log('[ad] model loaded,',gltf.animations.length,'clip(s)');
+  },
+  ev=>{
+    if(ev.lengthComputable){
+      bar.style.width=(ev.loaded/ev.total*100).toFixed(1)+'%';
+      loaderText.textContent=(ev.loaded/1048576).toFixed(0)+' / '+(ev.total/1048576).toFixed(0)+' MB';
+    } else {
+      loaderText.textContent=(ev.loaded/1048576).toFixed(0)+' MB';
+    }
+  },
+  err=>{ console.error('[ad] model failed:',err); loaderText.textContent='Could not load model.glb'; }
+);
+
+/* ---- sizing ----
+   The .ad div is 768x1152 / 430x669 but Blender renders 0.5625. The old
+   <video> reconciled that with object-fit:cover, which preserves WIDTH
+   and crops top/bottom. So lock the horizontal FOV to Blender's and let
+   vertical follow the container. With the surviving CSS scale(1.08) this
+   reproduces the video's framing exactly: 92.59% of the render's width
+   and 78.13% of its height, in both breakpoints. */
+function resize(){
+  const w=ad.clientWidth,h=ad.clientHeight;
+  if(!w||!h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(H_FOV_RAD/2)/camera.aspect));
+  camera.updateProjectionMatrix();
+}
+resize();
+window.addEventListener('resize',resize);
+if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
+
+/* ---- loop ---- */
+function tick(){
+  requestAnimationFrame(tick);
+  /* Ease toward the target rather than snapping. deviceorientation
+     arrives noisy and irregular; this is the lowpass. The canvas keeps
+     its stylesheet scale(1.08) and is never transformed from JS - the
+     motion lives in the camera now. */
+  const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
+  currentU+=(tu-currentU)*EASE;
+  currentV+=(tv-currentV)*EASE;
+  applyCameraTilt(currentU,currentV);
+
+  if(mixer) mixer.update(clock.getDelta());
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(tick);
+
+/* ===================================================================
+   CALIBRATION SURFACE - window.__ad in the console.
+   =================================================================== */
+window.__ad={
+  THREE,scene,camera,renderer,rig,
+  get mixer(){return mixer;}, get action(){return action;},
+  hFovDeg:THREE.MathUtils.radToDeg(H_FOV_RAD),
+
+  setExposure(v){renderer.toneMappingExposure=v;return v;},
+  setEnv(v){scene.environmentIntensity=v;return v;},
+  setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
+  lights(){return rig.map(l=>[l.name,+l.intensity.toFixed(3)]);},
+
+  motion(on=true){ motionEnabled=on; return on?'motion on':'motion off (camera returns to the verified pose)'; },
+  recenter(){ neutralBeta=null; neutralGamma=null; targetU=0; targetV=0; return 'neutral resets on next reading'; },
+  tilt(){ return {yawDeg:+(currentU*MAX_YAW_DEG).toFixed(3), pitchDeg:+(currentV*MAX_PITCH_DEG).toFixed(3),
+                  u:+currentU.toFixed(3), v:+currentV.toFixed(3),
+                  source:gyroActive?'gyro':(pointerActive?'pointer':'none'),
+                  cameraPos:camera.position.toArray().map(n=>+n.toFixed(6))}; },
+  setTiltRange(y,p){ if(typeof y==='number')MAX_YAW_DEG=y; if(typeof p==='number')MAX_PITCH_DEG=p;
+                     return {MAX_YAW_DEG,MAX_PITCH_DEG}; },
+  setInputRange(d){ INPUT_RANGE_DEG=d; return INPUT_RANGE_DEG; },
+
+  play(){ if(action) action.paused=false; return 'playing'; },
+  pause(){ if(action) action.paused=true; return 'paused'; },
+  scrub(t){ if(!action) return 'no clip'; action.paused=true;
+            action.time=t%action.getClip().duration; mixer.update(0);
+            return 'frame '+Math.round(t*30)+' (t='+action.time.toFixed(3)+'s)'; },
+  animInfo(){ if(!action) return 'no clip'; const c=action.getClip();
+              return {clip:c.name,duration:c.duration,tracks:c.tracks.length,
+                      time:action.time,paused:action.paused,running:action.isRunning()}; },
+
+  mat(name,props){
+    let n=0;
+    scene.traverse(o=>{ if(o.isMesh){
+      const ms=Array.isArray(o.material)?o.material:[o.material];
+      for(const m of ms) if(m.name===name){ Object.assign(m,props); m.needsUpdate=true; n++; }
+    }});
+    return n+' instance(s) updated';
+  },
+  mats(){ const s=new Set(); scene.traverse(o=>{ if(o.isMesh){
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms) s.add(m.name); }}); return [...s].sort(); },
+
+  /* A/B against the real Cycles output: drops ref/frame_N.png over the
+     canvas with the SAME object-fit:cover + scale(1.08) the video had,
+     and parks the animation on the matching time. Motion is frozen so
+     the comparison is fair. */
+  ab(frame=392,opacity=0.5){
+    this.motion(false);
+    let img=document.getElementById('__ref');
+    if(!img){ img=document.createElement('img'); img.id='__ref';
+      img.style.cssText='position:absolute;inset:0;width:100%;height:100%;'+
+        'object-fit:cover;transform:scale(1.08);z-index:11;pointer-events:none;';
+      ad.appendChild(img); }
+    img.src='./ref/frame_'+frame+'.png'; img.style.opacity=opacity;
+    return this.scrub(frame/30);
+  },
+  abOff(){ const i=document.getElementById('__ref'); if(i) i.remove();
+           this.motion(true); return this.play(); }
+};
+</script>

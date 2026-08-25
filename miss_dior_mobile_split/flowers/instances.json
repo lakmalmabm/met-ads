@@ -1,0 +1,718 @@
+{
+ "frame": 0,
+ "flowers": [
+  "Daisy Full",
+  "Daisy Full.001",
+  "Daisy Full.002",
+  "Daisy Full.003",
+  "Daisy Full.004",
+  "Daisy Full.005",
+  "Daisy Full.006",
+  "Daisy Full.007",
+  "Daisy Full.008",
+  "Daisy Full.009",
+  "Daisy Full.010",
+  "Lily full",
+  "Lily full.001",
+  "Lily full.002",
+  "Lily full.003",
+  "Lily full.004",
+  "Lily full.005",
+  "Lily full.006",
+  "Lily full.007",
+  "Lily full.008",
+  "Lily full.009",
+  "Lily full.010",
+  "Tulip Full",
+  "Tulip Full.001",
+  "Tulip Full.002",
+  "Tulip Full.003"
+ ],
+ "meshes": [
+  {
+   "id": 0,
+   "name": "BezierCurve.006",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 1,
+   "name": "Plane.010",
+   "verts": 3778,
+   "tris": 7552,
+   "mats": [
+    "Lily Leaf"
+   ]
+  },
+  {
+   "id": 2,
+   "name": "NurbsPath.004",
+   "verts": 19328,
+   "tris": 38336,
+   "mats": [
+    "BlueFilament"
+   ]
+  },
+  {
+   "id": 3,
+   "name": "Plane.027",
+   "verts": 31011,
+   "tris": 61440,
+   "mats": [
+    "Blue padel",
+    "Lily Pistil"
+   ]
+  },
+  {
+   "id": 4,
+   "name": "Cube.018",
+   "verts": 698,
+   "tris": 1392,
+   "mats": [
+    "Material.007"
+   ]
+  },
+  {
+   "id": 5,
+   "name": "Sphere",
+   "verts": 897,
+   "tris": 1728,
+   "mats": [
+    "Lily Pistil"
+   ]
+  },
+  {
+   "id": 6,
+   "name": "BezierCurve.001",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 7,
+   "name": "NurbsPath.006",
+   "verts": 23360,
+   "tris": 46396,
+   "mats": [
+    "Lily Filament",
+    "Lily Pistil"
+   ]
+  },
+  {
+   "id": 8,
+   "name": "Plane.017",
+   "verts": 25377,
+   "tris": 50176,
+   "mats": [
+    "Lily Petal"
+   ]
+  },
+  {
+   "id": 9,
+   "name": "Mesh",
+   "verts": 30,
+   "tris": 54,
+   "mats": [
+    "Lily Petal Hair"
+   ]
+  },
+  {
+   "id": 10,
+   "name": "Cube.011",
+   "verts": 1890,
+   "tris": 3776,
+   "mats": [
+    "Lily Anther",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 11,
+   "name": "Cube.009",
+   "verts": 698,
+   "tris": 1392,
+   "mats": [
+    "Lily Stigma"
+   ]
+  },
+  {
+   "id": 12,
+   "name": "BezierCurve.002",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 13,
+   "name": "Plane.018",
+   "verts": 1845,
+   "tris": 3520,
+   "mats": [
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 14,
+   "name": "NurbsPath.002",
+   "verts": 3348,
+   "tris": 5992,
+   "mats": [
+    "Daisy Petal rose",
+    "Daisy Base"
+   ]
+  },
+  {
+   "id": 15,
+   "name": "Plane.006",
+   "verts": 289,
+   "tris": 512,
+   "mats": [
+    "Daisy Green Outer Petal"
+   ]
+  },
+  {
+   "id": 16,
+   "name": "BezierCurve.007",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 17,
+   "name": "NurbsPath.008",
+   "verts": 119317,
+   "tris": 231592,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Base"
+   ]
+  },
+  {
+   "id": 18,
+   "name": "BezierCurve.003",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 19,
+   "name": "BezierCurve.004",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 20,
+   "name": "BezierCurve.008",
+   "verts": 4096,
+   "tris": 8064,
+   "mats": [
+    "Tulip Petal",
+    "Tulip Stem",
+    "Tulip Leaf",
+    "Tulip Stamen",
+    "Tulip Stigma"
+   ]
+  },
+  {
+   "id": 21,
+   "name": "Plane.005",
+   "verts": 8385,
+   "tris": 16384,
+   "mats": [
+    "Tulip Leaf"
+   ]
+  },
+  {
+   "id": 22,
+   "name": "NurbsPath.003",
+   "verts": 1734,
+   "tris": 3072,
+   "mats": [
+    "Tulip Petal"
+   ]
+  },
+  {
+   "id": 23,
+   "name": "Cube.003",
+   "verts": 7810,
+   "tris": 15616,
+   "mats": [
+    "Tulip Stigma"
+   ]
+  },
+  {
+   "id": 24,
+   "name": "Cube.004",
+   "verts": 1154,
+   "tris": 2304,
+   "mats": [
+    "Tulip Stamen"
+   ]
+  },
+  {
+   "id": 25,
+   "name": "BezierCurve.005",
+   "verts": 4096,
+   "tris": 8064,
+   "mats": [
+    "Tulip Petal",
+    "Tulip Stem",
+    "Tulip Leaf",
+    "Tulip Stamen",
+    "Tulip Stigma"
+   ]
+  },
+  {
+   "id": 26,
+   "name": "BezierCurve.009",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal.001",
+    "Daisy Stamen Outer.002",
+    "Daisy Green Outer Petal.001",
+    "Daisy Stem.001",
+    "Daisy Base.001",
+    "Daisy Stem Hairs.001",
+    "Daisy Leaf.001"
+   ]
+  },
+  {
+   "id": 27,
+   "name": "Plane.004",
+   "verts": 1845,
+   "tris": 3520,
+   "mats": [
+    "Daisy Leaf.001"
+   ]
+  },
+  {
+   "id": 28,
+   "name": "NurbsPath.013",
+   "verts": 47862,
+   "tris": 79784,
+   "mats": [
+    "Material.006",
+    "Daisy Base.001"
+   ]
+  },
+  {
+   "id": 29,
+   "name": "Plane.007",
+   "verts": 289,
+   "tris": 512,
+   "mats": [
+    "Daisy Green Outer Petal.001"
+   ]
+  },
+  {
+   "id": 30,
+   "name": "Mesh",
+   "verts": 256,
+   "tris": 448,
+   "mats": [
+    "Daisy Base.001"
+   ]
+  },
+  {
+   "id": 31,
+   "name": "BezierCurve.010",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 32,
+   "name": "BezierCurve.011",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 33,
+   "name": "BezierCurve.012",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 34,
+   "name": "BezierCurve.013",
+   "verts": 4096,
+   "tris": 8064,
+   "mats": [
+    "Tulip Petal",
+    "Tulip Stem",
+    "Tulip Leaf",
+    "Tulip Stamen",
+    "Tulip Stigma"
+   ]
+  },
+  {
+   "id": 35,
+   "name": "BezierCurve.014",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 36,
+   "name": "BezierCurve.015",
+   "verts": 4092,
+   "tris": 8064,
+   "mats": [
+    "Tulip Petal",
+    "Tulip Stem",
+    "Tulip Leaf",
+    "Tulip Stamen",
+    "Tulip Stigma"
+   ]
+  },
+  {
+   "id": 37,
+   "name": "BezierCurve.016",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 38,
+   "name": "BezierCurve.017",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 39,
+   "name": "BezierCurve.018",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal.001",
+    "Daisy Stamen Outer.002",
+    "Daisy Green Outer Petal.001",
+    "Daisy Stem.001",
+    "Daisy Base.001",
+    "Daisy Stem Hairs.001",
+    "Daisy Leaf.001"
+   ]
+  },
+  {
+   "id": 40,
+   "name": "BezierCurve.019",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 41,
+   "name": "BezierCurve.020",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 42,
+   "name": "BezierCurve.021",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 43,
+   "name": "BezierCurve.023",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  },
+  {
+   "id": 44,
+   "name": "BezierCurve.024",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 45,
+   "name": "BezierCurve.025",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 46,
+   "name": "BezierCurve.026",
+   "verts": 2048,
+   "tris": 4032,
+   "mats": [
+    "Lily Petal",
+    "Lily Stem",
+    "Lily Anther",
+    "Lily Pistil",
+    "Lily Pollen",
+    "Lily Stigma",
+    "Lily Filament",
+    "Lily Petal Hair",
+    "Lily Branch",
+    "Lily Stamen Inner"
+   ]
+  },
+  {
+   "id": 47,
+   "name": "BezierCurve.027",
+   "verts": 2047,
+   "tris": 4032,
+   "mats": [
+    "Daisy Petal",
+    "Daisy Stamen Outer",
+    "Daisy Green Outer Petal",
+    "Daisy Stem",
+    "Daisy Base",
+    "Daisy Stem Hairs",
+    "Daisy Leaf"
+   ]
+  }
+ ],
+ "instanceCount": 5091,
+ "stride": 72,
+ "layout": "int32 flowerId, int32 meshId, float32[16] matrix (column-major)",
+ "collisions": [
+  [
+   "Mesh",
+   [
+    30,
+    27
+   ],
+   [
+    256,
+    224
+   ]
+  ]
+ ],
+ "perMesh": {
+  "0": 1,
+  "1": 54,
+  "2": 7,
+  "3": 35,
+  "4": 35,
+  "5": 7,
+  "6": 1,
+  "7": 4,
+  "8": 24,
+  "9": 948,
+  "10": 20,
+  "11": 4,
+  "12": 1,
+  "13": 24,
+  "14": 3,
+  "15": 72,
+  "16": 1,
+  "17": 6,
+  "18": 1,
+  "19": 1,
+  "20": 1,
+  "21": 24,
+  "22": 8,
+  "23": 8,
+  "24": 64,
+  "25": 1,
+  "26": 1,
+  "27": 6,
+  "28": 2,
+  "29": 16,
+  "30": 3694,
+  "31": 1,
+  "32": 1,
+  "33": 1,
+  "34": 1,
+  "35": 1,
+  "36": 1,
+  "37": 1,
+  "38": 1,
+  "39": 1,
+  "40": 1,
+  "41": 1,
+  "42": 1,
+  "43": 1,
+  "44": 1,
+  "45": 1,
+  "46": 1,
+  "47": 1
+ }
+}

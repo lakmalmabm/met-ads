@@ -1,0 +1,443 @@
+{
+ "flowers": [
+  "Daisy Full",
+  "Daisy Full.001",
+  "Daisy Full.002",
+  "Daisy Full.003",
+  "Daisy Full.004",
+  "Daisy Full.005",
+  "Daisy Full.006",
+  "Daisy Full.007",
+  "Daisy Full.008",
+  "Daisy Full.009",
+  "Daisy Full.010",
+  "Lily full",
+  "Lily full.001",
+  "Lily full.002",
+  "Lily full.003",
+  "Lily full.004",
+  "Lily full.005",
+  "Lily full.006",
+  "Lily full.007",
+  "Lily full.008",
+  "Lily full.009",
+  "Lily full.010",
+  "Tulip Full",
+  "Tulip Full.001",
+  "Tulip Full.002",
+  "Tulip Full.003"
+ ],
+ "tracks": [
+  {
+   "flower": 0,
+   "name": "Daisy Full",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 0,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 1,
+   "name": "Daisy Full.001",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 5412,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 2,
+   "name": "Daisy Full.002",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 10824,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 3,
+   "name": "Daisy Full.003",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 16236,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 3,
+   "name": "Daisy Full.003",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 21648,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 3,
+   "name": "Daisy Full.003",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 28864,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 4,
+   "name": "Daisy Full.004",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 34276,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 4,
+   "name": "Daisy Full.004",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 39688,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 4,
+   "name": "Daisy Full.004",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 46904,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 5,
+   "name": "Daisy Full.005",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 52316,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 6,
+   "name": "Daisy Full.006",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 57728,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 6,
+   "name": "Daisy Full.006",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 63140,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 6,
+   "name": "Daisy Full.006",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 70356,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 7,
+   "name": "Daisy Full.007",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 75768,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 7,
+   "name": "Daisy Full.007",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 81180,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 8,
+   "name": "Daisy Full.008",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 88396,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 9,
+   "name": "Daisy Full.009",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 93808,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 9,
+   "name": "Daisy Full.009",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 99220,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 10,
+   "name": "Daisy Full.010",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 106436,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 10,
+   "name": "Daisy Full.010",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 111848,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 11,
+   "name": "Lily full",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 119064,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 12,
+   "name": "Lily full.001",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 124476,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 13,
+   "name": "Lily full.002",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 129888,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 14,
+   "name": "Lily full.003",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 135300,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 14,
+   "name": "Lily full.003",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 140712,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 15,
+   "name": "Lily full.004",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 146124,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 15,
+   "name": "Lily full.004",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 151536,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 16,
+   "name": "Lily full.005",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 158752,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 17,
+   "name": "Lily full.006",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 164164,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 18,
+   "name": "Lily full.007",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 169576,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 18,
+   "name": "Lily full.007",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 174988,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 18,
+   "name": "Lily full.007",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 182204,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 19,
+   "name": "Lily full.008",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 187616,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 20,
+   "name": "Lily full.009",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 193028,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 21,
+   "name": "Lily full.010",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 198440,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 22,
+   "name": "Tulip Full",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 203852,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 22,
+   "name": "Tulip Full",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 209264,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 22,
+   "name": "Tulip Full",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 216480,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 23,
+   "name": "Tulip Full.001",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 221892,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 23,
+   "name": "Tulip Full.001",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 227304,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 24,
+   "name": "Tulip Full.002",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 232716,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 24,
+   "name": "Tulip Full.002",
+   "path": "rotation",
+   "interpolation": "LINEAR",
+   "byteOffset": 238128,
+   "count": 451,
+   "components": 4
+  },
+  {
+   "flower": 24,
+   "name": "Tulip Full.002",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 245344,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 25,
+   "name": "Tulip Full.003",
+   "path": "translation",
+   "interpolation": "LINEAR",
+   "byteOffset": 250756,
+   "count": 451,
+   "components": 3
+  },
+  {
+   "flower": 25,
+   "name": "Tulip Full.003",
+   "path": "scale",
+   "interpolation": "LINEAR",
+   "byteOffset": 256168,
+   "count": 451,
+   "components": 3
+  }
+ ],
+ "keyCount": 451,
+ "duration": 15.0,
+ "sharedTimes": true,
+ "interpolations": [
+  "LINEAR"
+ ]
+}

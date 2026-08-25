@@ -1,0 +1,600 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Miss Dior — Mobile Interscroller</title>
+<link rel="icon" href="data:," />
+
+<style>
+  /* ---------------------------------------------------------------
+     DIMENSIONS — from spec
+       page width   768px
+       top section   768 × 1824  (24px L/R padding)
+       video         768 × 1152
+       bottom        768 × 1824  (24px L/R padding)
+     --------------------------------------------------------------- */
+  :root {
+    --page-w:    768px;
+    --section-h: 1824px;
+    --video-h:   1152px;
+    --video-w:   768px;
+    --pad-x:     24px;
+    --sk:        #e5e5e5;
+    --gap:       12px;
+    --r:         4px;
+  }
+
+  @media (max-width: 768px) {
+    :root {
+      --page-w:    448px;
+      --section-h: 1824px;
+      --video-h:   669px;
+      --video-w:   430px;
+      --pad-x:     24px;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto;
+    overscroll-behavior: none;
+  }
+
+  body {
+    margin: 0;
+    background: #f5f5f5;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .page {
+    position: relative;
+    width: var(--page-w);
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 20px 50px rgba(0, 0, 0, 0.08);
+    /* no overflow:hidden — it breaks position:sticky on the video */
+  }
+
+  /* ---------------------------------------------------------------
+     PUBLISHER MOCK — skeleton content. z-index 20 so it slides
+     OVER the sticky video beneath it.
+     --------------------------------------------------------------- */
+  .mock {
+    position: relative;
+    z-index: 20;
+    background: #fff;
+    min-height: var(--section-h);
+    padding: 40px var(--pad-x);
+  }
+  .mock--bottom { margin-bottom: 75px; }
+
+  /* Shared skeleton bar */
+  .s { border-radius: var(--r); background: var(--sk); }
+
+  /* ---- Pattern A: text lines (5-col grid) -------------------- */
+  .pa {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pa .s { height: 12px; }
+  .pa .s--full { grid-column: span 5; }
+  .pa .s--short { grid-column: span 2; }
+  .pa .s--3 { grid-column: span 3; }
+  .pa .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern B: media block (5-col grid) ------------------- */
+  .pb {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pb .s { height: 12px; }
+  .pb .s--img { grid-column: span 3; grid-row: span 2; height: auto; min-height: 64px; }
+  .pb .s--thumb { grid-column: span 1; height: 64px; }
+  .pb .s--3 { grid-column: span 3; }
+  .pb .s--2 { grid-column: span 2; }
+  .pb .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern C: article row (5-col, split 3+2) ------------- */
+  .pc {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+
+  /* Left: thumbnail + text lines */
+  .pc__left {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__left .s--pic { grid-row: span 6; min-height: 72px; }
+  .pc__left .s { height: 12px; }
+
+  /* Right: two mini-cards stacked */
+  .pc__right {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .pc__card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__card .s--pic { grid-column: span 1; grid-row: span 3; min-height: 48px; }
+  .pc__card .s { height: 12px; }
+  .pc__card .s--w1 { grid-column: span 1; }
+
+  /* ---------------------------------------------------------------
+     STICKY VIDEO — z-index 10, revealed as mock scrolls past.
+     --------------------------------------------------------------- */
+  .ad {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    width: var(--video-w);
+    height: var(--video-h);
+    margin: 0 auto;
+    background: #000;
+    overflow: hidden;
+  }
+
+  .ad video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transform: scale(1.08);
+    will-change: transform;
+  }
+
+  /* iOS gyro permission prompt */
+  .gyro-prompt {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+    font-size: 13px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.3s;
+  }
+  .gyro-prompt.hidden { opacity: 0; pointer-events: none; }
+
+  .ad__placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+    padding: var(--pad-x);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+  <!-- ============================================================
+       TOP SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial — fills remaining height) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================
+       STICKY VIDEO — 768 × 1152
+       ============================================================ -->
+  <div class="ad" id="ad">
+    <video id="video" preload="auto" playsinline muted loop autoplay>
+      <source src="/miss_dior_mobile/video.mp4" type="video/mp4" />
+    </video>
+    <div class="gyro-prompt" id="gyro-prompt">Tap to enable motion</div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock mock--bottom">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /.page -->
+
+<script>
+(function () {
+  'use strict';
+
+  var video = document.getElementById('video');
+  var prompt = document.getElementById('gyro-prompt');
+  var EASE = 0.08;
+  var MAX_SHIFT = 20; /* px */
+  var targetX = 0, targetY = 0;
+  var currentX = 0, currentY = 0;
+  var gyroActive = false;
+
+  /* Video error fallback */
+  video.addEventListener('error', function () {
+    var ph = document.createElement('div');
+    ph.className = 'ad__placeholder';
+    ph.textContent = 'Drop video.mp4 into the miss_dior_mobile folder';
+    video.parentNode.appendChild(ph);
+    video.style.display = 'none';
+  }, true);
+
+  /* --- Gyro tilt ----------------------------------------------- */
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+  function onOrientation(e) {
+    /* beta = front-back (-180..180), gamma = left-right (-90..90) */
+    var gamma = e.gamma || 0;
+    var beta = e.beta || 0;
+    /* Normalise: phone upright ≈ beta 90, so offset by 90 */
+    beta = beta - 90;
+    targetX = clamp(gamma / 30, -1, 1) * MAX_SHIFT;
+    targetY = clamp(beta / 30, -1, 1) * MAX_SHIFT;
+  }
+
+  function startGyro() {
+    window.addEventListener('deviceorientation', onOrientation);
+    gyroActive = true;
+    prompt.classList.add('hidden');
+  }
+
+  /* rAF loop — ease toward target */
+  function tick() {
+    if (gyroActive) {
+      currentX += (targetX - currentX) * EASE;
+      currentY += (targetY - currentY) * EASE;
+      video.style.transform =
+        'scale(1.08) translate(' + currentX.toFixed(2) + 'px, ' + currentY.toFixed(2) + 'px)';
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+
+  /* --- Permission handling ------------------------------------ */
+  var needsPermission = typeof DeviceOrientationEvent !== 'undefined' &&
+                        typeof DeviceOrientationEvent.requestPermission === 'function';
+
+  if (needsPermission) {
+    /* iOS 13+ — must request on user gesture */
+    prompt.addEventListener('click', function () {
+      DeviceOrientationEvent.requestPermission().then(function (state) {
+        if (state === 'granted') startGyro();
+        else prompt.classList.add('hidden');
+      }).catch(function () {
+        prompt.classList.add('hidden');
+      });
+    });
+  } else if ('DeviceOrientationEvent' in window) {
+    /* Android / other — just start, hide prompt */
+    prompt.classList.add('hidden');
+    startGyro();
+  } else {
+    /* Desktop — no gyro, hide prompt */
+    prompt.classList.add('hidden');
+  }
+
+})();
+</script>
+</body>
+</html>

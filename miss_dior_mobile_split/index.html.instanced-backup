@@ -1,0 +1,1028 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Miss Dior — Mobile Interscroller</title>
+<link rel="icon" href="data:," />
+
+<style>
+  /* ---------------------------------------------------------------
+     DIMENSIONS — from spec
+       page width   768px
+       top section   768 × 1824  (24px L/R padding)
+       video         768 × 1152
+       bottom        768 × 1824  (24px L/R padding)
+     --------------------------------------------------------------- */
+  :root {
+    --page-w:    768px;
+    --section-h: 1824px;
+    --video-h:   1152px;
+    --video-w:   768px;
+    --pad-x:     24px;
+    --sk:        #e5e5e5;
+    --gap:       12px;
+    --r:         4px;
+  }
+
+  @media (max-width: 768px) {
+    :root {
+      --page-w:    448px;
+      --section-h: 1824px;
+      --video-h:   669px;
+      --video-w:   430px;
+      --pad-x:     24px;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto;
+    overscroll-behavior: none;
+  }
+
+  body {
+    margin: 0;
+    background: #f5f5f5;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .page {
+    position: relative;
+    width: var(--page-w);
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 20px 50px rgba(0, 0, 0, 0.08);
+    /* no overflow:hidden — it breaks position:sticky on the video */
+  }
+
+  /* ---------------------------------------------------------------
+     PUBLISHER MOCK — skeleton content. z-index 20 so it slides
+     OVER the sticky video beneath it.
+     --------------------------------------------------------------- */
+  .mock {
+    position: relative;
+    z-index: 20;
+    background: #fff;
+    min-height: var(--section-h);
+    padding: 40px var(--pad-x);
+  }
+  .mock--bottom { margin-bottom: 75px; }
+
+  /* Shared skeleton bar */
+  .s { border-radius: var(--r); background: var(--sk); }
+
+  /* ---- Pattern A: text lines (5-col grid) -------------------- */
+  .pa {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pa .s { height: 12px; }
+  .pa .s--full { grid-column: span 5; }
+  .pa .s--short { grid-column: span 2; }
+  .pa .s--3 { grid-column: span 3; }
+  .pa .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern B: media block (5-col grid) ------------------- */
+  .pb {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pb .s { height: 12px; }
+  .pb .s--img { grid-column: span 3; grid-row: span 2; height: auto; min-height: 64px; }
+  .pb .s--thumb { grid-column: span 1; height: 64px; }
+  .pb .s--3 { grid-column: span 3; }
+  .pb .s--2 { grid-column: span 2; }
+  .pb .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern C: article row (5-col, split 3+2) ------------- */
+  .pc {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+
+  /* Left: thumbnail + text lines */
+  .pc__left {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__left .s--pic { grid-row: span 6; min-height: 72px; }
+  .pc__left .s { height: 12px; }
+
+  /* Right: two mini-cards stacked */
+  .pc__right {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .pc__card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__card .s--pic { grid-column: span 1; grid-row: span 3; min-height: 48px; }
+  .pc__card .s { height: 12px; }
+  .pc__card .s--w1 { grid-column: span 1; }
+
+  /* ---------------------------------------------------------------
+     STICKY VIDEO — z-index 10, revealed as mock scrolls past.
+     --------------------------------------------------------------- */
+  .ad {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    width: var(--video-w);
+    height: var(--video-h);
+    margin: 0 auto;
+    /* Was #000. The Blender backdrop is a light grey gradient (sampled
+       #dadddf -> #abadae down the frame), so grey fails far less visibly
+       than black during load. */
+    background: #d5d6d8;
+    overflow: hidden;
+  }
+
+  /* The canvas replaces the <video> at IDENTICAL geometry. It fills .ad
+     exactly, so there is no object-fit: the crop that object-fit:cover used
+     to perform is now done by the camera's FOV (see CAM in the script).
+     scale(1.08) is kept verbatim - it is what gives the gyro translate its
+     overscan, and it is part of the framing match. */
+  .ad canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: scale(1.08);
+    will-change: transform;
+  }
+
+  /* Load readout. model.glb is ~357 MB unoptimised, so this is not optional. */
+  .ad__loader {
+    position: absolute;
+    inset: 0;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #d5d6d8;
+    color: #555;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    transition: opacity 0.4s;
+  }
+  .ad__loader.hidden { opacity: 0; pointer-events: none; }
+  .ad__bar {
+    width: 140px;
+    height: 2px;
+    background: rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+  }
+  .ad__bar i {
+    display: block;
+    width: 0%;
+    height: 100%;
+    background: #c2185b;
+    transition: width 0.2s linear;
+  }
+
+  /* Per-part readout. Absolutely positioned INSIDE .ad so the div's fixed
+     768x1152 / 430x669 geometry is untouched. __ad.showStats(false) hides it. */
+  .ad__stats {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 13;
+    margin: 0;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #333;
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre;
+    border-radius: 3px;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* iOS gyro permission prompt */
+  .gyro-prompt {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+    font-size: 13px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.3s;
+  }
+  .gyro-prompt.hidden { opacity: 0; pointer-events: none; }
+
+  .ad__placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+    padding: var(--pad-x);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="page">
+
+  <!-- ============================================================
+       TOP SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial — fills remaining height) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================
+       STICKY VIDEO — 768 × 1152
+       ============================================================ -->
+  <div class="ad" id="ad">
+    <canvas id="stage"></canvas>
+    <pre class="ad__stats" id="stats"></pre>
+    <div class="ad__loader" id="loader">
+      <div class="ad__bar"><i id="bar"></i></div>
+      <div id="loader-text">loading scene</div>
+    </div>
+    <div class="gyro-prompt" id="gyro-prompt">Tap to enable motion</div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock mock--bottom">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /.page -->
+
+<!-- three.js r185, vendored under ./vendor. CLAUDE.md forbids runtime npm
+     dependencies and requires ads to be self-contained with relative paths,
+     so the library ships with the unit. The import map is what lets the
+     addon modules resolve their bare 'three' specifier without a bundler. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+/* ===================================================================
+   SPLIT EXPERIMENT - instanced flowers
+   Camera and light rig are the verified ones; do not diverge.
+   The flowers no longer ship as an 8.7M-triangle bake. In Blender they
+   were always curves + Geometry Nodes scattering a small library, and
+   the exporter had flattened every instance into unique triangles. We
+   ship the library once (48 meshes, 45k tris) plus 5,091 transforms and
+   rebuild with InstancedMesh: 320 MB -> 4.1 MB.
+   =================================================================== */
+
+const B2T = new THREE.Matrix4().set(1,0,0,0,  0,0,1,0,  0,-1,0,0,  0,0,0,1);
+const T2B = B2T.clone().invert();
+function blenderMatrix(r){
+  const m=new THREE.Matrix4().set(
+    r[0][0],r[0][1],r[0][2],r[0][3], r[1][0],r[1][1],r[1][2],r[1][3],
+    r[2][0],r[2][1],r[2][2],r[2][3], r[3][0],r[3][1],r[3][2],r[3][3]);
+  return new THREE.Matrix4().multiplyMatrices(B2T,m);
+}
+
+const CAM={pos:[0.015295881778,-0.011073246598,3.969096660614],
+           target:[0.015295881778,-0.011073246598,0],
+           lensMM:90,sensorMM:36,renderW:1080,renderH:1920,near:0.1,far:1000};
+const H_FOV_RAD=2*Math.atan((CAM.sensorMM*CAM.renderW/CAM.renderH)/(2*CAM.lensMM));
+
+const LIGHT_GAIN=1.0, W_TO_NITS=1/Math.PI;   /* NOT 683/pi */
+const LIGHTS=[
+  {name:'Area',    W:150.5,size:[2.290009,2.290009],m:[[2.290008783340454,9.94446954886968e-18,-1.0007170170173445e-16,-0.01010955311357975],[5.353863235432611e-18,2.2634973526000977,0.34744760394096375,1.1622482538223267],[1.004219829126486e-16,-0.34744760394096375,2.2634973526000977,3.7277026176452637],[0,0,0,1]]},
+  {name:'Area.001',W:33.3, size:[2.379771,2.285399],m:[[2.3789494037628174,-0.06004314869642258,-0.0005531621281988919,-0.05178740620613098],[0.013023633509874344,0.4978509247303009,-2.0871574878692627,0.15547463297843933],[0.06115417182445526,2.229705572128296,0.4660077691078186,0.7153764963150024],[0,0,0,1]]},
+  {name:'Area.002',W:5.0,  size:[1.510525,1.510525],m:[[0.6887286901473999,-1.2695475816726685,0.44225364923477173,0.29077789187431335],[0.9892858266830444,0.1421373337507248,-1.1326063871383667,-0.6889719367027283],[0.9103040099143982,0.8060597777366638,0.8962706327438354,0.29528161883354187],[0,0,0,1]]},
+  {name:'Area.003',W:9.1,  size:[2.617539,2.617539],m:[[1,0,0,0.015295881778001785],[0,0.010622496716678143,0.9999435544013977,1.3373398780822754],[0,-0.9999435544013977,0.010622496716678143,0.08211664110422134],[0,0,0,1]]},
+  {name:'Area.004',W:16.6, size:[0.917526,0.917526],m:[[0.7890290021896362,-0.22862040996551514,-0.40868133306503296,-0.4372585713863373],[-0.19595548510551453,0.566074550151825,-0.6949931383132935,-0.5636577010154724],[0.42531073093414307,0.684942901134491,0.4379708766937256,0.5910373330116272],[0,0,0,1]]},
+  {name:'Area.005',W:5.0,  size:[1.510525,1.510525],m:[[1.5105254650115967,0,0,-0.15965536236763],[0,-0.09068802744150162,-1.507800579071045,0.0783577412366867],[0,1.5078004598617554,-0.09068803489208221,-0.987615704536438],[0,0,0,1]]}
+];
+
+const HDRI_URL='./studio_small_08_2k.hdr', HDRI_ROT_DEG=16.8, ENV_INTENSITY=1.0;
+const BACKDROP=[[0.000,'#d9dbdf'],[0.125,'#d6d8d9'],[0.250,'#cfcfd1'],[0.375,'#cbcbcd'],
+                [0.500,'#cacacc'],[0.625,'#c4c4c6'],[0.750,'#bbbbbd'],[0.875,'#afafb4'],
+                [1.000,'#abacb2']];
+
+const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
+const MATERIAL_OVERRIDES={
+  /* Panel: Blender Glass BSDF, IOR 0.84. three clamps ior to [1, 2.333],
+     so match normal-incidence Fresnel instead: R0=((n-1)/(n+1))^2 gives
+     n=1.19 for the same rim brightness. thickness = Solidify's 0.014. */
+  'Material.003':{color:lin(1,1,1),roughness:0.0,metalness:0,transmission:1,ior:1.19,thickness:0.014},
+  'glass.004':{color:lin(1,1,1),roughness:0.0,metalness:0,transmission:1,ior:1.45,thickness:0.30},
+  'glass.005':{color:lin(1,0.9041,0.9167),roughness:0.0,metalness:0,transmission:1,ior:2.06,thickness:0.16},
+  'with pattern.002':{color:lin(1,1,1),roughness:0.1722,metalness:0,transmission:1,ior:1.45,
+                      thickness:0.30,bumpMap:'./tex/houndstooth.png',bumpScale:0.375},
+  'Water 02.002':{color:lin(1,0.0446,0.2907),roughness:0.0,metalness:0,transmission:1,ior:1.45,
+                  thickness:0.25,attenuationColor:lin(1,0.0446,0.2907),attenuationDistance:0.5},
+  'Material.020':{color:lin(0.8,0.8,0.8),metalness:1.0,roughness:0.10},
+  'Ribbon.001':{color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,
+                normalMap:'./tex/ribbon_normal.png'},
+  'RIBBONZ':{color:lin(0.011,0.0092,0.0092),metalness:0,roughness:0.55},
+  'Material.026':{color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667},
+  'Material.029':{color:lin(0.01,0.01,0.01),metalness:0,roughness:0.36}
+};
+
+/* ---- motion input (see the main build for the full rationale) ---- */
+const EASE=0.08;
+let MAX_YAW_DEG=3.5, MAX_PITCH_DEG=2.5, INPUT_RANGE_DEG=25;
+const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1;
+
+const canvas=document.getElementById('stage');
+const prompt=document.getElementById('gyro-prompt');
+const loaderEl=document.getElementById('loader');
+const loaderText=document.getElementById('loader-text');
+const bar=document.getElementById('bar');
+const ad=document.getElementById('ad');
+const statsEl=document.getElementById('stats');
+
+let targetU=0,targetV=0,currentU=0,currentV=0;
+let gyroActive=false,pointerActive=false,motionEnabled=true;
+let neutralBeta=null,neutralGamma=null;
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+function onOrientation(e){
+  if(e.beta===null&&e.gamma===null) return;
+  const beta=e.beta||0,gamma=e.gamma||0;
+  if(neutralBeta===null){neutralBeta=beta;neutralGamma=gamma;}
+  else{neutralBeta+=(beta-neutralBeta)*RECENTER;neutralGamma+=(gamma-neutralGamma)*RECENTER;}
+  const angle=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
+  let du=gamma-neutralGamma,dv=beta-neutralBeta;
+  if(angle===90){const t=du;du=dv;dv=-t;}
+  else if(angle===-90||angle===270){const t=du;du=-dv;dv=t;}
+  targetU=clamp(du/INPUT_RANGE_DEG,-1,1)*INVERT_YAW;
+  targetV=clamp(dv/INPUT_RANGE_DEG,-1,1)*INVERT_PITCH;
+}
+function startGyro(){window.addEventListener('deviceorientation',onOrientation);gyroActive=true;prompt.classList.add('hidden');}
+function onPointer(e){
+  if(gyroActive) return;
+  const r=ad.getBoundingClientRect(); if(!r.width||!r.height) return;
+  targetU=clamp(((e.clientX-r.left)/r.width-0.5)*2,-1,1)*INVERT_YAW;
+  targetV=clamp(((e.clientY-r.top)/r.height-0.5)*2,-1,1)*-INVERT_PITCH;
+  pointerActive=true;
+}
+window.addEventListener('pointermove',onPointer,{passive:true});
+window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;}},{passive:true});
+const needsPermission=typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
+if(needsPermission){
+  prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
+    .then(s=>{if(s==='granted')startGyro();else prompt.classList.add('hidden');})
+    .catch(()=>prompt.classList.add('hidden'));});
+} else if('DeviceOrientationEvent' in window){prompt.classList.add('hidden');startGyro();}
+else {prompt.classList.add('hidden');}
+
+/* ===================================================================
+   SCENE
+   =================================================================== */
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=1.0;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+
+const scene=new THREE.Scene();
+(function(){
+  const c=document.createElement('canvas');c.width=4;c.height=512;
+  const ctx=c.getContext('2d');const g=ctx.createLinearGradient(0,0,0,512);
+  for(const [s,col] of BACKDROP) g.addColorStop(s,col);
+  ctx.fillStyle=g;ctx.fillRect(0,0,4,512);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;scene.background=t;
+})();
+
+const camera=new THREE.PerspectiveCamera(50,1,CAM.near,CAM.far);
+camera.position.set(...CAM.pos); camera.lookAt(...CAM.target);
+const PIVOT=new THREE.Vector3(...CAM.target);
+const BASE_SPH=new THREE.Spherical().setFromVector3(new THREE.Vector3(...CAM.pos).sub(PIVOT));
+const _sph=new THREE.Spherical(),_off=new THREE.Vector3();
+function applyCameraTilt(u,v){
+  _sph.set(BASE_SPH.radius,
+           BASE_SPH.phi-v*THREE.MathUtils.degToRad(MAX_PITCH_DEG),
+           BASE_SPH.theta+u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
+  camera.position.copy(PIVOT).add(_off.setFromSpherical(_sph));
+  camera.lookAt(PIVOT);
+}
+
+RectAreaLightUniformsLib.init();
+const rig=[],_p=new THREE.Vector3(),_q=new THREE.Quaternion(),_s=new THREE.Vector3();
+for(const L of LIGHTS){
+  const area=L.size[0]*L.size[1];
+  const l=new THREE.RectAreaLight(0xffffff,(L.W/area)*W_TO_NITS*LIGHT_GAIN,L.size[0],L.size[1]);
+  blenderMatrix(L.m).decompose(_p,_q,_s);
+  l.position.copy(_p); l.quaternion.copy(_q); l.name=L.name;
+  l.userData.baseIntensity=l.intensity; rig.push(l); scene.add(l);
+}
+new RGBELoader().load(HDRI_URL,t=>{
+  t.mapping=THREE.EquirectangularReflectionMapping;
+  scene.environment=t; scene.environmentIntensity=ENV_INTENSITY;
+  scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(HDRI_ROT_DEG),0);
+},undefined,e=>console.warn('[ad] HDRI failed',e));
+
+/* ---- material overrides ---- */
+const texLoader=new THREE.TextureLoader(),texCache={};
+function getTex(u){
+  if(!texCache[u]){const t=texLoader.load(u);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.flipY=false;texCache[u]=t;}
+  return texCache[u];
+}
+function applyMaterialOverrides(root){
+  const hit=[];
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    const nx=ms.map(m=>{
+      const sp=MATERIAL_OVERRIDES[m.name]; if(!sp) return m;
+      const p={name:m.name,side:m.side,transparent:!!sp.transmission};
+      for(const [k,v] of Object.entries(sp)){
+        if(k==='bumpMap') p.bumpMap=getTex(v);
+        else if(k==='normalMap') p.normalMap=getTex(v);
+        else p[k]=v;
+      }
+      hit.push(m.name);
+      return new THREE.MeshPhysicalMaterial(p);
+    });
+    o.material=Array.isArray(o.material)?nx:nx[0];
+  });
+  return hit;
+}
+
+/* ---- loaders: KTX2 + meshopt for the packed flower assets ---- */
+const ktx2=new KTX2Loader().setTranscoderPath('./vendor/jsm/libs/basis/').detectSupport(renderer);
+const gltfLoader=new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+
+const stats={}, progress={}, loaded={};
+const t0=performance.now();
+function renderStats(){
+  const rows=Object.keys(stats).sort().map(k=>{
+    const s=stats[k];
+    return `${k.padEnd(12)} ${(s.bytes/1e6).toFixed(2).padStart(7)}MB ${String(s.tris).padStart(8)}t ${(s.ms/1000).toFixed(1).padStart(5)}s`;
+  });
+  if(stats.flowers&&stats.bottle&&stats.panel){
+    const tot=Object.values(stats).reduce((a,s)=>({b:a.b+s.bytes,t:a.t+s.tris}),{b:0,t:0});
+    rows.push('-'.repeat(38));
+    rows.push(`${'TOTAL'.padEnd(12)} ${(tot.b/1e6).toFixed(2).padStart(7)}MB ${String(tot.t).padStart(8)}t ${((performance.now()-t0)/1000).toFixed(1).padStart(5)}s`);
+    rows.push(`${'instances'.padEnd(12)} ${String(stats.flowers.instances||0).padStart(9)}`);
+    rows.push(`${'draw calls'.padEnd(12)} ${String(stats.flowers.draws||0).padStart(9)}`);
+    loaderEl.classList.add('hidden');
+  }
+  statsEl.textContent=rows.join('\n');
+}
+function countTris(root){
+  let n=0; root.traverse(o=>{
+    if(!o.isMesh&&!o.isInstancedMesh) return;
+    const g=o.geometry; if(!g) return;
+    const per=g.index?g.index.count/3:(g.attributes.position?g.attributes.position.count/3:0);
+    n+=per*(o.isInstancedMesh?o.count:1);
+  });
+  return Math.round(n);
+}
+
+/* ---- panel + bottle, unchanged ---- */
+for(const part of [{key:'panel',url:'./parts/panel.glb'},{key:'bottle',url:'./parts/bottle.glb'}]){
+  const t=performance.now();
+  gltfLoader.load(part.url,g=>{
+    applyMaterialOverrides(g.scene);
+    g.scene.name=part.key; scene.add(g.scene); loaded[part.key]=g.scene;
+    stats[part.key]={bytes:(progress[part.key]||{}).total||0,tris:countTris(g.scene),ms:performance.now()-t};
+    renderStats();
+  },ev=>{progress[part.key]={loaded:ev.loaded,total:ev.total};},
+    e=>console.error('[ad]',part.key,'failed',e));
+}
+
+/* ===================================================================
+   FLOWERS - library + instance transforms + animation
+   =================================================================== */
+let mixer=null, action=null, flowerNodes=[], instanceGroups=[], planesMixer=null, planesAction=null;
+const clock=new THREE.Clock();
+
+async function loadFlowers(){
+  const t=performance.now();
+  const [libGltf, planesGltf, manRes, instRes, animRes, timesRes] = await Promise.all([
+    gltfLoader.loadAsync('./flowers/flower-lib.glb'),
+    gltfLoader.loadAsync('./flowers/planes.glb'),
+    fetch('./flowers/instances.json').then(r=>r.json()),
+    fetch('./flowers/instances.bin').then(r=>r.arrayBuffer()),
+    fetch('./flowers/anim.json').then(r=>r.json()),
+    Promise.all([fetch('./flowers/anim.bin').then(r=>r.arrayBuffer()),
+                 fetch('./flowers/times.bin').then(r=>r.arrayBuffer())])
+  ]);
+  const [animBuf, timesBuf] = timesRes;
+
+  /* --- map SRC_### -> its primitives (geometry + material) --- */
+  const srcPrims=new Map();
+  libGltf.scene.traverse(o=>{
+    const m=/^SRC_(\d+)/.exec(o.name||'');
+    if(!m) return;
+    const id=parseInt(m[1],10);
+    const prims=[];
+    o.traverse(c=>{ if(c.isMesh) prims.push({geometry:c.geometry,material:c.material}); });
+    if(prims.length) srcPrims.set(id,prims);
+  });
+
+  /* --- 29 empty nodes carry the animation; instances hang off them --- */
+  const holder=new THREE.Group(); holder.name='flowers';
+  flowerNodes = animRes.flowers.map(n=>{ const o=new THREE.Object3D(); o.name=n; holder.add(o); return o; });
+  scene.add(holder); loaded.flowers=holder;
+
+  /* --- rebuild the clip verbatim from the extracted tracks --- */
+  const times=new Float32Array(timesBuf);
+  const tracks=animRes.tracks.map(tr=>{
+    const vals=new Float32Array(animBuf, tr.byteOffset, tr.count*tr.components);
+    const nm=animRes.flowers[tr.flower];
+    if(tr.path==='translation') return new THREE.VectorKeyframeTrack(nm+'.position',times,vals);
+    if(tr.path==='scale')       return new THREE.VectorKeyframeTrack(nm+'.scale',times,vals);
+    if(tr.path==='rotation')    return new THREE.QuaternionKeyframeTrack(nm+'.quaternion',times,vals);
+    return null;
+  }).filter(Boolean);
+  const clip=new THREE.AnimationClip('Scene',animRes.duration,tracks);
+  mixer=new THREE.AnimationMixer(holder);
+  action=mixer.clipAction(clip);
+  action.setLoop(THREE.LoopRepeat,Infinity);
+  action.play();
+
+  /* --- instance transforms ---
+     Blender gave these in ITS space (Z-up), but the exported geometry and
+     the glTF animation are Y-up. A local matrix maps geometry into the
+     flower's frame, and BOTH ends need converting, so it is a similarity
+     transform C*M*C^-1 - not a straight copy, and not C*M either. */
+  const dv=new DataView(instRes);
+  const N=manRes.instanceCount, STRIDE=72;
+  const byMesh=new Map();
+  const tmp=new THREE.Matrix4();
+  for(let i=0;i<N;i++){
+    const off=i*STRIDE;
+    const fid=dv.getInt32(off,true), mid=dv.getInt32(off+4,true);
+    const a=new Array(16);
+    for(let k=0;k<16;k++) a[k]=dv.getFloat32(off+8+k*4,true);
+    tmp.fromArray(a);                                   // column-major
+    const local=new THREE.Matrix4().multiplyMatrices(B2T,tmp).multiply(T2B);
+    if(!byMesh.has(mid)) byMesh.set(mid,[]);
+    byMesh.get(mid).push({fid,local});
+  }
+
+  /* --- one InstancedMesh per (source mesh x primitive) --- */
+  let draws=0, missing=[];
+  for(const [mid,list] of byMesh){
+    const prims=srcPrims.get(mid);
+    if(!prims){ missing.push(mid); continue; }
+    const metas=[];
+    for(const pr of prims){
+      const im=new THREE.InstancedMesh(pr.geometry,pr.material,list.length);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.frustumCulled=false;      /* instances span the whole field */
+      im.name='inst_'+mid;
+      holder.add(im); metas.push(im); draws++;
+    }
+    instanceGroups.push({list,metas});
+  }
+  if(missing.length) console.warn('[ad] no library mesh for ids',missing);
+
+  /* --- the three non-instanced planes ride along with their own clip --- */
+  planesGltf.scene.name='planes';
+  holder.add(planesGltf.scene);
+  if(planesGltf.animations.length){
+    planesMixer=new THREE.AnimationMixer(planesGltf.scene);
+    planesAction=planesMixer.clipAction(planesGltf.animations[0]);
+    planesAction.setLoop(THREE.LoopRepeat,Infinity);
+    planesAction.play();
+  }
+
+  updateInstances();
+  const bytes=(await Promise.all(['flower-lib.glb','planes.glb','instances.bin','anim.bin','times.bin']
+    .map(f=>fetch('./flowers/'+f,{method:'HEAD'}).then(r=>+(r.headers.get('content-length')||0)).catch(()=>0))))
+    .reduce((a,b)=>a+b,0);
+  stats.flowers={bytes,tris:countTris(holder),ms:performance.now()-t,instances:N,draws};
+  renderStats();
+  console.log('[ad] flowers:',N,'instances,',draws,'draw calls,',srcPrims.size,'library meshes');
+}
+
+const _m=new THREE.Matrix4();
+function updateInstances(){
+  for(const {list,metas} of instanceGroups){
+    for(let i=0;i<list.length;i++){
+      const e=list[i];
+      _m.multiplyMatrices(flowerNodes[e.fid].matrixWorld,e.local);
+      for(const im of metas) im.setMatrixAt(i,_m);
+    }
+    for(const im of metas) im.instanceMatrix.needsUpdate=true;
+  }
+}
+
+loadFlowers().catch(e=>{console.error('[ad] flowers failed',e);loaderText.textContent='flowers failed - see console';});
+
+/* ---- sizing: identical frustum rule ---- */
+function resize(){
+  const w=ad.clientWidth,h=ad.clientHeight; if(!w||!h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(H_FOV_RAD/2)/camera.aspect));
+  camera.updateProjectionMatrix();
+}
+resize(); window.addEventListener('resize',resize);
+if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
+
+function tick(){
+  requestAnimationFrame(tick);
+  const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
+  currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
+  applyCameraTilt(currentU,currentV);
+
+  const dt=clock.getDelta();
+  if(mixer) mixer.update(dt);
+  if(planesMixer) planesMixer.update(dt);
+  if(instanceGroups.length){
+    /* the flower nodes must have current world matrices BEFORE their
+       instance matrices are composed, so force the update here rather
+       than leaving it to the renderer. */
+    scene.updateMatrixWorld(true);
+    updateInstances();
+  }
+  renderer.render(scene,camera);
+}
+requestAnimationFrame(tick);
+
+window.__ad={
+  THREE,scene,camera,renderer,rig,loaded,stats,
+  get mixer(){return mixer;}, get action(){return action;},
+  get instanceGroups(){return instanceGroups;},
+  hFovDeg:THREE.MathUtils.radToDeg(H_FOV_RAD),
+  setExposure(v){renderer.toneMappingExposure=v;return v;},
+  setEnv(v){scene.environmentIntensity=v;return v;},
+  setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
+  lights(){return rig.map(l=>[l.name,+l.intensity.toFixed(3)]);},
+  motion(on=true){motionEnabled=on;return on?'motion on':'motion off';},
+  recenter(){neutralBeta=null;neutralGamma=null;targetU=0;targetV=0;return 'reset';},
+  tilt(){return {yawDeg:+(currentU*MAX_YAW_DEG).toFixed(3),pitchDeg:+(currentV*MAX_PITCH_DEG).toFixed(3),
+                 source:gyroActive?'gyro':(pointerActive?'pointer':'none')};},
+  setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;
+                    return {MAX_YAW_DEG,MAX_PITCH_DEG};},
+  setInputRange(d){INPUT_RANGE_DEG=d;return d;},
+  toggle(k){const o=loaded[k];if(!o)return 'not loaded';o.visible=!o.visible;return k+' '+(o.visible?'on':'off');},
+  only(k){for(const n in loaded) loaded[n].visible=(n===k);return 'showing '+k;},
+  all(){for(const n in loaded) loaded[n].visible=true;return 'all on';},
+  showStats(on=true){statsEl.style.display=on?'block':'none';return on;},
+  play(){if(action)action.paused=false;if(planesAction)planesAction.paused=false;return 'playing';},
+  pause(){if(action)action.paused=true;if(planesAction)planesAction.paused=true;return 'paused';},
+  scrub(t){
+    if(!action) return 'no clip';
+    for(const [a,mx] of [[action,mixer],[planesAction,planesMixer]]){
+      if(!a) continue;
+      a.paused=true; a.time=t%a.getClip().duration; mx.update(0);
+    }
+    scene.updateMatrixWorld(true); updateInstances();
+    return 'frame '+Math.round(t*30);
+  },
+  mat(name,props){let n=0;scene.traverse(o=>{if(o.isMesh||o.isInstancedMesh){
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms) if(m&&m.name===name){Object.assign(m,props);m.needsUpdate=true;n++;}}});return n;},
+  mats(){const s=new Set();scene.traverse(o=>{if(o.isMesh||o.isInstancedMesh){
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms) if(m) s.add(m.name);}});return [...s].sort();},
+  ab(frame=392,opacity=0.5){
+    this.motion(false);
+    let img=document.getElementById('__ref');
+    if(!img){img=document.createElement('img');img.id='__ref';
+      img.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;'+
+        'transform:scale(1.08);z-index:11;pointer-events:none;';
+      ad.appendChild(img);}
+    img.src='./ref/frame_'+frame+'.png'; img.style.opacity=opacity;
+    return this.scrub(frame/30);
+  },
+  abOff(){const i=document.getElementById('__ref');if(i)i.remove();this.motion(true);return this.play();}
+};
+</script>
+</body>
+</html>
