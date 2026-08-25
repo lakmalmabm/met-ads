@@ -29,6 +29,17 @@ const TYPES = {
   '.mp4':  'video/mp4',
   '.webm': 'video/webm',
   '.svg':  'image/svg+xml',
+  /* glTF-Binary and Radiance HDR. Without these both fall back to
+     application/octet-stream, which still loads, but the explicit
+     types keep devtools' network panel honest. */
+  '.glb':  'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.hdr':  'image/vnd.radiance',
+  '.exr':  'image/aces',
+  '.ktx2': 'image/ktx2',
+  '.wasm': 'application/wasm',
+  '.bin':  'application/octet-stream',
+  '.json': 'application/json; charset=utf-8',
 };
 
 http.createServer((req, res) => {
