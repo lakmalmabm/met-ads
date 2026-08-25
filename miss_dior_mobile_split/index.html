@@ -814,9 +814,9 @@ function countTris(root){
 let mixer=null, action=null;
 const clock=new THREE.Clock();
 
-for(const part of [{key:'panel',url:'/miss_dior_mobile_split/parts/panel.glb'},
-                   {key:'bottle',url:'/miss_dior_mobile_split/parts/bottle.glb'},
-                   {key:'flowers',url:'/miss_dior_mobile_split/parts/flowers.glb'}]){
+for(const part of [{key:'panel',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/panel.glb'},
+                   {key:'bottle',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/bottle.glb'},
+                   {key:'flowers',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/flowers.glb'}]){
   const t=performance.now();
   gltfLoader.load(part.url,g=>{
     applyMaterialOverrides(g.scene);
