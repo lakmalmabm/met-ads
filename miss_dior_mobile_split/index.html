@@ -727,14 +727,24 @@ const scene=new THREE.Scene();
 const camera=new THREE.PerspectiveCamera(50,1,CAM.near,CAM.far);
 camera.position.set(...CAM.pos); camera.lookAt(...CAM.target);
 const PIVOT=new THREE.Vector3(...CAM.target);
-const BASE_SPH=new THREE.Spherical().setFromVector3(new THREE.Vector3(...CAM.pos).sub(PIVOT));
-const _sph=new THREE.Spherical(),_off=new THREE.Vector3();
-function applyCameraTilt(u,v){
-  _sph.set(BASE_SPH.radius,
-           BASE_SPH.phi-v*THREE.MathUtils.degToRad(MAX_PITCH_DEG),
-           BASE_SPH.theta+u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
-  camera.position.copy(PIVOT).add(_off.setFromSpherical(_sph));
-  camera.lookAt(PIVOT);
+
+const _yawAxis=new THREE.Vector3(0,0,1);
+const _pitchAxis=new THREE.Vector3(1,0,0);
+const _baseQ=new THREE.Quaternion();
+const _yawQ=new THREE.Quaternion();
+const _pitchQ=new THREE.Quaternion();
+const _tiltQ=new THREE.Quaternion();
+function applyModelTilt(u,v){
+  const yawRad=u*THREE.MathUtils.degToRad(MAX_YAW_DEG);
+  const pitchRad=v*THREE.MathUtils.degToRad(MAX_PITCH_DEG);
+  _yawQ.setFromAxisAngle(_yawAxis,yawRad);
+  _pitchQ.setFromAxisAngle(_pitchAxis,pitchRad);
+  _tiltQ.copy(_yawQ).multiply(_pitchQ);
+  for(const k in loaded){
+    const obj=loaded[k]; if(!obj) continue;
+    if(!obj.userData._baseQ) obj.userData._baseQ=obj.quaternion.clone();
+    obj.quaternion.copy(obj.userData._baseQ).premultiply(_tiltQ);
+  }
 }
 
 RectAreaLightUniformsLib.init();
@@ -855,7 +865,7 @@ function tick(){
   requestAnimationFrame(tick);
   const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
   currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
-  applyCameraTilt(currentU,currentV);
+  applyModelTilt(currentU,currentV);
 
   if(mixer) mixer.update(clock.getDelta());
   renderer.render(scene,camera);
