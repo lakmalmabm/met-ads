@@ -661,7 +661,7 @@ const MATERIAL_OVERRIDES={
 
 /* ---- motion input (see the main build for the full rationale) ---- */
 const EASE=0.08;
-let MAX_YAW_DEG=6, MAX_PITCH_DEG=4.5, MAX_ROLL_DEG=4, INPUT_RANGE_DEG=25;
+let MAX_YAW_DEG=18, MAX_PITCH_DEG=14, MAX_ROLL_DEG=12, INPUT_RANGE_DEG=25;
 const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1, INVERT_ROLL=1;
 
 const canvas=document.getElementById('stage');
@@ -690,16 +690,15 @@ function onOrientation(e){
   targetV=clamp(dv/INPUT_RANGE_DEG,-1,1)*INVERT_PITCH;
   targetW=clamp(dw/INPUT_RANGE_DEG,-1,1)*INVERT_ROLL;
 }
-function startGyro(){window.addEventListener('deviceorientation',onOrientation);gyroActive=true;prompt.classList.add('hidden');}
-function onPointer(e){
-  if(gyroActive) return;
-  const r=ad.getBoundingClientRect(); if(!r.width||!r.height) return;
-  targetU=clamp(((e.clientX-r.left)/r.width-0.5)*2,-1,1)*INVERT_YAW;
-  targetV=clamp(((e.clientY-r.top)/r.height-0.5)*2,-1,1)*-INVERT_PITCH;
-  pointerActive=true;
+function startGyro(){
+  window.addEventListener('deviceorientation',function probe(e){
+    if(e.beta===null&&e.gamma===null) return;
+    gyroActive=true;prompt.classList.add('hidden');
+    window.removeEventListener('deviceorientation',probe);
+    window.addEventListener('deviceorientation',onOrientation);
+  });
 }
-window.addEventListener('pointermove',onPointer,{passive:true});
-window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;targetW=0;}},{passive:true});
+/* mouse/pointer rotation disabled — gyro only */
 const needsPermission=typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
 if(needsPermission){
   prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
@@ -730,9 +729,9 @@ const camera=new THREE.PerspectiveCamera(50,1,CAM.near,CAM.far);
 camera.position.set(...CAM.pos); camera.lookAt(...CAM.target);
 const PIVOT=new THREE.Vector3(...CAM.target);
 
-const _yawAxis=new THREE.Vector3(0,0,1);
+const _yawAxis=new THREE.Vector3(0,1,0);
 const _pitchAxis=new THREE.Vector3(1,0,0);
-const _rollAxis=new THREE.Vector3(0,1,0);
+const _rollAxis=new THREE.Vector3(0,0,1);
 const _yawQ=new THREE.Quaternion();
 const _pitchQ=new THREE.Quaternion();
 const _rollQ=new THREE.Quaternion();
@@ -860,6 +859,10 @@ function resize(){
   camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(H_FOV_RAD/2)/camera.aspect));
   camera.updateProjectionMatrix();
 }
+const axes=new THREE.AxesHelper(1.5);
+axes.renderOrder=999;axes.material.depthTest=false;
+scene.add(axes);
+
 resize(); window.addEventListener('resize',resize);
 if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
 
