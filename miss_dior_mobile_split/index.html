@@ -661,7 +661,7 @@ const MATERIAL_OVERRIDES={
 
 /* ---- motion input (see the main build for the full rationale) ---- */
 const EASE=0.08;
-let MAX_YAW_DEG=3.5, MAX_PITCH_DEG=2.5, INPUT_RANGE_DEG=25;
+let MAX_YAW_DEG=6, MAX_PITCH_DEG=4.5, INPUT_RANGE_DEG=25;
 const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1;
 
 const canvas=document.getElementById('stage');
@@ -790,10 +790,7 @@ function renderStats(){
     const s=stats[k];
     return `${k.padEnd(12)} ${(s.bytes/1e6).toFixed(2).padStart(7)}MB ${String(s.tris).padStart(8)}t ${(s.ms/1000).toFixed(1).padStart(5)}s`;
   });
-  if(stats.flowers&&stats.bottle&&stats.panel){
-    const tot=Object.values(stats).reduce((a,s)=>({b:a.b+s.bytes,t:a.t+s.tris}),{b:0,t:0});
-    rows.push('-'.repeat(38));
-    rows.push(`${'TOTAL'.padEnd(12)} ${(tot.b/1e6).toFixed(2).padStart(7)}MB ${String(tot.t).padStart(8)}t ${((performance.now()-t0)/1000).toFixed(1).padStart(5)}s`);
+  if(stats.bottle){
     loaderEl.classList.add('hidden');
   }
   statsEl.textContent=rows.join('\n');
@@ -814,9 +811,7 @@ function countTris(root){
 let mixer=null, action=null;
 const clock=new THREE.Clock();
 
-for(const part of [{key:'panel',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/panel.glb'},
-                   {key:'bottle',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/bottle.glb'},
-                   {key:'flowers',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/flowers.glb'}]){
+for(const part of [{key:'bottle',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/bottle.glb'}]){
   const t=performance.now();
   gltfLoader.load(part.url,g=>{
     applyMaterialOverrides(g.scene);
@@ -834,12 +829,12 @@ for(const part of [{key:'panel',url:'https://media.githubusercontent.com/media/l
 }
 
 function updateLoaderText(){
-  const pend=['panel','bottle','flowers'].filter(k=>!stats[k]).map(k=>{
+  const pend=['bottle'].filter(k=>!stats[k]).map(k=>{
     const pr=progress[k]; if(!pr) return null;
     return `${k} ${(pr.loaded/1048576).toFixed(0)}/${pr.total?(pr.total/1048576).toFixed(0):'?'}MB`;
   }).filter(Boolean);
   loaderText.textContent = pend.length ? pend.join('   ') : 'ready';
-  const tot=['panel','bottle','flowers'].reduce((a,k)=>{
+  const tot=['bottle'].reduce((a,k)=>{
     const pr=progress[k]; return {l:a.l+(pr?pr.loaded:0), t:a.t+(pr&&pr.total?pr.total:0)};
   },{l:0,t:0});
   if(tot.t) bar.style.width=(tot.l/tot.t*100).toFixed(1)+'%';
