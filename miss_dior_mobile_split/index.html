@@ -661,8 +661,8 @@ const MATERIAL_OVERRIDES={
 
 /* ---- motion input (see the main build for the full rationale) ---- */
 const EASE=0.08;
-let MAX_YAW_DEG=6, MAX_PITCH_DEG=4.5, INPUT_RANGE_DEG=25;
-const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1;
+let MAX_YAW_DEG=6, MAX_PITCH_DEG=4.5, MAX_ROLL_DEG=4, INPUT_RANGE_DEG=25;
+const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1, INVERT_ROLL=1;
 
 const canvas=document.getElementById('stage');
 const prompt=document.getElementById('gyro-prompt');
@@ -672,21 +672,23 @@ const bar=document.getElementById('bar');
 const ad=document.getElementById('ad');
 const statsEl=document.getElementById('stats');
 
-let targetU=0,targetV=0,currentU=0,currentV=0;
+let targetU=0,targetV=0,targetW=0,currentU=0,currentV=0,currentW=0;
 let gyroActive=false,pointerActive=false,motionEnabled=true;
-let neutralBeta=null,neutralGamma=null;
+let neutralBeta=null,neutralGamma=null,neutralAlpha=null;
 const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
 function onOrientation(e){
   if(e.beta===null&&e.gamma===null) return;
-  const beta=e.beta||0,gamma=e.gamma||0;
-  if(neutralBeta===null){neutralBeta=beta;neutralGamma=gamma;}
-  else{neutralBeta+=(beta-neutralBeta)*RECENTER;neutralGamma+=(gamma-neutralGamma)*RECENTER;}
+  const alpha=e.alpha||0,beta=e.beta||0,gamma=e.gamma||0;
+  if(neutralBeta===null){neutralBeta=beta;neutralGamma=gamma;neutralAlpha=alpha;}
+  else{neutralBeta+=(beta-neutralBeta)*RECENTER;neutralGamma+=(gamma-neutralGamma)*RECENTER;neutralAlpha+=(alpha-neutralAlpha)*RECENTER;}
   const angle=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
-  let du=gamma-neutralGamma,dv=beta-neutralBeta;
+  let du=gamma-neutralGamma,dv=beta-neutralBeta,dw=alpha-neutralAlpha;
+  if(dw>180) dw-=360; else if(dw<-180) dw+=360;
   if(angle===90){const t=du;du=dv;dv=-t;}
   else if(angle===-90||angle===270){const t=du;du=-dv;dv=t;}
   targetU=clamp(du/INPUT_RANGE_DEG,-1,1)*INVERT_YAW;
   targetV=clamp(dv/INPUT_RANGE_DEG,-1,1)*INVERT_PITCH;
+  targetW=clamp(dw/INPUT_RANGE_DEG,-1,1)*INVERT_ROLL;
 }
 function startGyro(){window.addEventListener('deviceorientation',onOrientation);gyroActive=true;prompt.classList.add('hidden');}
 function onPointer(e){
@@ -697,7 +699,7 @@ function onPointer(e){
   pointerActive=true;
 }
 window.addEventListener('pointermove',onPointer,{passive:true});
-window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;}},{passive:true});
+window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;targetW=0;}},{passive:true});
 const needsPermission=typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
 if(needsPermission){
   prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
@@ -730,16 +732,16 @@ const PIVOT=new THREE.Vector3(...CAM.target);
 
 const _yawAxis=new THREE.Vector3(0,0,1);
 const _pitchAxis=new THREE.Vector3(1,0,0);
-const _baseQ=new THREE.Quaternion();
+const _rollAxis=new THREE.Vector3(0,1,0);
 const _yawQ=new THREE.Quaternion();
 const _pitchQ=new THREE.Quaternion();
+const _rollQ=new THREE.Quaternion();
 const _tiltQ=new THREE.Quaternion();
-function applyModelTilt(u,v){
-  const yawRad=u*THREE.MathUtils.degToRad(MAX_YAW_DEG);
-  const pitchRad=v*THREE.MathUtils.degToRad(MAX_PITCH_DEG);
-  _yawQ.setFromAxisAngle(_yawAxis,yawRad);
-  _pitchQ.setFromAxisAngle(_pitchAxis,pitchRad);
-  _tiltQ.copy(_yawQ).multiply(_pitchQ);
+function applyModelTilt(u,v,w){
+  _yawQ.setFromAxisAngle(_yawAxis,u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
+  _pitchQ.setFromAxisAngle(_pitchAxis,v*THREE.MathUtils.degToRad(MAX_PITCH_DEG));
+  _rollQ.setFromAxisAngle(_rollAxis,w*THREE.MathUtils.degToRad(MAX_ROLL_DEG));
+  _tiltQ.copy(_yawQ).multiply(_pitchQ).multiply(_rollQ);
   for(const k in loaded){
     const obj=loaded[k]; if(!obj) continue;
     if(!obj.userData._baseQ) obj.userData._baseQ=obj.quaternion.clone();
@@ -863,9 +865,9 @@ if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
 
 function tick(){
   requestAnimationFrame(tick);
-  const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
-  currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
-  applyModelTilt(currentU,currentV);
+  const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0, tw=motionEnabled?targetW:0;
+  currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE; currentW+=(tw-currentW)*EASE;
+  applyModelTilt(currentU,currentV,currentW);
 
   if(mixer) mixer.update(clock.getDelta());
   renderer.render(scene,camera);
@@ -881,7 +883,7 @@ window.__ad={
   setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
   lights(){return rig.map(l=>[l.name,+l.intensity.toFixed(3)]);},
   motion(on=true){motionEnabled=on;return on?'motion on':'motion off';},
-  recenter(){neutralBeta=null;neutralGamma=null;targetU=0;targetV=0;return 'reset';},
+  recenter(){neutralBeta=null;neutralGamma=null;neutralAlpha=null;targetU=0;targetV=0;targetW=0;return 'reset';},
   tilt(){return {yawDeg:+(currentU*MAX_YAW_DEG).toFixed(3),pitchDeg:+(currentV*MAX_PITCH_DEG).toFixed(3),
                  source:gyroActive?'gyro':(pointerActive?'pointer':'none')};},
   setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;
