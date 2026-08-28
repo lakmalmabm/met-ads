@@ -240,6 +240,60 @@
   }
   .gyro-prompt.hidden { opacity: 0; pointer-events: none; }
 
+  .light-controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #333;
+    min-width: 220px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .light-controls h4 {
+    margin: 8px 0 4px;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .light-controls h4:first-child { margin-top: 0; }
+  .light-controls .copy-btn {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px;
+    background: #333;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .light-controls .copy-btn:active { background: #555; }
+  .light-controls label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .light-controls input[type=range] {
+    flex: 1;
+    max-width: 110px;
+  }
+  .light-controls span.val {
+    min-width: 36px;
+    text-align: right;
+  }
+
   .ad__placeholder {
     display: flex;
     align-items: center;
@@ -255,6 +309,31 @@
 </head>
 
 <body>
+
+<div class="light-controls" id="lc">
+  <h4>Shadow light</h4>
+  <label>X <input type="range" id="lx" min="-4" max="8" step="0.1" value="6.4"><span class="val" id="lx-v">6.4</span></label>
+  <label>Y <input type="range" id="ly" min="-4" max="4" step="0.1" value="1.0"><span class="val" id="ly-v">1.0</span></label>
+  <label>Z <input type="range" id="lz" min="-2" max="6" step="0.1" value="4.6"><span class="val" id="lz-v">4.6</span></label>
+  <label>Bright <input type="range" id="lb" min="0" max="10" step="0.1" value="5"><span class="val" id="lb-v">5.0</span></label>
+  <label><input type="checkbox" id="t-shadow" checked> On</label>
+  <h4>Area lights</h4>
+  <div id="area-controls"></div>
+  <label><input type="checkbox" id="t-area" checked> All on</label>
+  <h4>Box</h4>
+  <label>Width <input type="range" id="bw" min="0.01" max="1.2" step="0.01" value="0.76"><span class="val" id="bw-v">0.76</span></label>
+  <label>Height <input type="range" id="bh" min="0.01" max="1.2" step="0.01" value="1.12"><span class="val" id="bh-v">1.12</span></label>
+  <label>Depth <input type="range" id="bd" min="0.1" max="20" step="0.1" value="1"><span class="val" id="bd-v">1.0</span></label>
+  <label><input type="checkbox" id="t-edges" checked> Show edges</label>
+  <h4>Materials</h4>
+  <label><input type="checkbox" id="t-matoverride"> Material overrides</label>
+  <h4>Camera</h4>
+  <label>Zoom <input type="range" id="cam-z" min="0.5" max="20" step="0.1" value="3.97"><span class="val" id="cam-z-v">3.97</span></label>
+  <h4>Environment</h4>
+  <label>HDRI <input type="range" id="hdri-int" min="0" max="3" step="0.05" value="1"><span class="val" id="hdri-v">1.0</span></label>
+  <label>Exposure <input type="range" id="exposure" min="0" max="3" step="0.05" value="0.35"><span class="val" id="exp-v">0.35</span></label>
+  <button class="copy-btn" id="copy-btn">Copy values</button>
+</div>
 
 <div class="page">
 
@@ -696,7 +775,16 @@ function startGyro(){
     window.addEventListener('deviceorientation',onOrientation);
   });
 }
-/* mouse/pointer rotation disabled — gyro only */
+const isTouchDevice='ontouchstart' in window||navigator.maxTouchPoints>0;
+function onPointer(e){
+  if(gyroActive||isTouchDevice) return;
+  const r=ad.getBoundingClientRect(); if(!r.width||!r.height) return;
+  targetU=clamp(((e.clientX-r.left)/r.width-0.5)*2,-1,1)*INVERT_YAW;
+  targetV=clamp(((e.clientY-r.top)/r.height-0.5)*2,-1,1)*INVERT_PITCH;
+  pointerActive=true;
+}
+window.addEventListener('pointermove',onPointer,{passive:true});
+window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;}},{passive:true});
 const needsPermission=typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
 if(needsPermission){
   prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
@@ -711,8 +799,10 @@ else {prompt.classList.add('hidden');}
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 renderer.toneMapping=THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure=1.0;
+renderer.toneMappingExposure=0.35;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 
 const scene=new THREE.Scene();
 (function(){
@@ -752,11 +842,96 @@ for(const L of LIGHTS){
   l.position.copy(_p); l.quaternion.copy(_q); l.name=L.name;
   l.userData.baseIntensity=l.intensity; rig.push(l); scene.add(l);
 }
+const AREA_OVERRIDES=[28.9,0,0,0,9,0];
+rig.forEach((l,i)=>{l.intensity=AREA_OVERRIDES[i];l.userData.baseIntensity=l.intensity;});
+
 new RGBELoader().load(HDRI_URL,t=>{
   t.mapping=THREE.EquirectangularReflectionMapping;
   scene.environment=t; scene.environmentIntensity=ENV_INTENSITY;
   scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(HDRI_ROT_DEG),0);
 },undefined,e=>console.warn('[ad] HDRI failed',e));
+
+/* ---- white box backdrop + shadow ---- */
+const boxMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,metalness:0,side:THREE.FrontSide});
+let BOX_W=0.76, BOX_H=1.12, BOX_D=1;
+const boxGroup=new THREE.Group();
+boxGroup.name='backdrop';
+const edgeMat=new THREE.LineBasicMaterial({color:0x666666,linewidth:2});
+let showEdges=true;
+function buildBox(){
+  while(boxGroup.children.length) boxGroup.remove(boxGroup.children[0]);
+  const walls=[];
+  const back=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_H),boxMat);
+  back.position.set(0,0,-BOX_D/2); back.receiveShadow=true; walls.push(back);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_D),boxMat);
+  floor.rotation.x=-Math.PI/2; floor.position.set(0,-BOX_H/2,0); floor.receiveShadow=true; walls.push(floor);
+  const ceil=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_D),boxMat);
+  ceil.rotation.x=Math.PI/2; ceil.position.set(0,BOX_H/2,0); walls.push(ceil);
+  const left=new THREE.Mesh(new THREE.PlaneGeometry(BOX_D,BOX_H),boxMat);
+  left.rotation.y=Math.PI/2; left.position.set(-BOX_W/2,0,0); left.receiveShadow=true; walls.push(left);
+  const right=new THREE.Mesh(new THREE.PlaneGeometry(BOX_D,BOX_H),boxMat);
+  right.rotation.y=-Math.PI/2; right.position.set(BOX_W/2,0,0); right.receiveShadow=true; walls.push(right);
+  for(const w of walls){
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(w.geometry),edgeMat);
+    edges.visible=showEdges;
+    w.add(edges);
+    boxGroup.add(w);
+  }
+}
+buildBox();
+scene.add(boxGroup);
+
+const shadowLight=new THREE.DirectionalLight(0xffffff,5);
+shadowLight.position.set(6.4,1.03,4.6);
+shadowLight.target.position.set(0,0,0);
+shadowLight.castShadow=true;
+shadowLight.shadow.mapSize.set(1024,1024);
+shadowLight.shadow.camera.near=0.1;
+shadowLight.shadow.camera.far=10;
+shadowLight.shadow.camera.left=-2;
+shadowLight.shadow.camera.right=2;
+shadowLight.shadow.camera.top=2;
+shadowLight.shadow.camera.bottom=-2;
+shadowLight.shadow.bias=-0.002;
+scene.add(shadowLight);
+scene.add(shadowLight.target);
+
+document.getElementById('lx').oninput=function(){shadowLight.position.x=+this.value;document.getElementById('lx-v').textContent=this.value;};
+document.getElementById('ly').oninput=function(){shadowLight.position.y=+this.value;document.getElementById('ly-v').textContent=this.value;};
+document.getElementById('lz').oninput=function(){shadowLight.position.z=+this.value;document.getElementById('lz-v').textContent=this.value;};
+document.getElementById('lb').oninput=function(){shadowLight.intensity=+this.value;document.getElementById('lb-v').textContent=this.value;};
+document.getElementById('t-shadow').onchange=function(){shadowLight.visible=this.checked;};
+
+const areaContainer=document.getElementById('area-controls');
+rig.forEach((l,i)=>{
+  const id='a'+i;
+  const row=document.createElement('label');
+  row.innerHTML=l.name+' <input type="range" id="'+id+'" min="0" max="50" step="0.1" value="'+l.intensity.toFixed(1)+'"><span class="val" id="'+id+'-v">'+l.intensity.toFixed(1)+'</span>';
+  areaContainer.appendChild(row);
+  document.getElementById(id).oninput=function(){l.intensity=+this.value;document.getElementById(id+'-v').textContent=this.value;};
+});
+document.getElementById('t-area').onchange=function(){for(const l of rig) l.visible=this.checked;};
+
+document.getElementById('bw').oninput=function(){BOX_W=+this.value;document.getElementById('bw-v').textContent=this.value;buildBox();};
+document.getElementById('bh').oninput=function(){BOX_H=+this.value;document.getElementById('bh-v').textContent=this.value;buildBox();};
+document.getElementById('bd').oninput=function(){BOX_D=+this.value;document.getElementById('bd-v').textContent=this.value;buildBox();};
+document.getElementById('t-edges').onchange=function(){showEdges=this.checked;boxGroup.traverse(o=>{if(o.isLineSegments)o.visible=showEdges;});};
+document.getElementById('t-matoverride').onchange=function(){toggleMaterialOverrides(this.checked);};
+document.getElementById('cam-z').oninput=function(){camera.position.z=+this.value;document.getElementById('cam-z-v').textContent=this.value;};
+
+document.getElementById('hdri-int').oninput=function(){scene.environmentIntensity=+this.value;document.getElementById('hdri-v').textContent=this.value;};
+document.getElementById('exposure').oninput=function(){renderer.toneMappingExposure=+this.value;document.getElementById('exp-v').textContent=this.value;};
+
+document.getElementById('copy-btn').onclick=function(){
+  const v={
+    shadowLight:{x:shadowLight.position.x,y:shadowLight.position.y,z:shadowLight.position.z,intensity:shadowLight.intensity,visible:shadowLight.visible},
+    areaLights:rig.map(l=>({name:l.name,intensity:+l.intensity.toFixed(2),visible:l.visible})),
+    box:{width:BOX_W,height:BOX_H,depth:BOX_D},
+    hdri:scene.environmentIntensity,
+    exposure:renderer.toneMappingExposure
+  };
+  navigator.clipboard.writeText(JSON.stringify(v,null,2)).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy values';},1500);});
+};
 
 /* ---- material overrides ---- */
 const texLoader=new THREE.TextureLoader(),texCache={};
@@ -764,10 +939,13 @@ function getTex(u){
   if(!texCache[u]){const t=texLoader.load(u);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.flipY=false;texCache[u]=t;}
   return texCache[u];
 }
+let matOverridesOn=true;
 function applyMaterialOverrides(root){
   const hit=[];
   root.traverse(o=>{
     if(!o.isMesh) return;
+    o.castShadow=true;
+    o.userData._origMat=Array.isArray(o.material)?o.material.map(m=>m.clone()):(o.material?o.material.clone():o.material);
     const ms=Array.isArray(o.material)?o.material:[o.material];
     const nx=ms.map(m=>{
       const sp=MATERIAL_OVERRIDES[m.name]; if(!sp) return m;
@@ -780,9 +958,21 @@ function applyMaterialOverrides(root){
       hit.push(m.name);
       return new THREE.MeshPhysicalMaterial(p);
     });
-    o.material=Array.isArray(o.material)?nx:nx[0];
+    o.userData._overrideMat=Array.isArray(o.material)?nx:nx[0];
+    o.material=o.userData._overrideMat;
   });
   return hit;
+}
+function toggleMaterialOverrides(on){
+  matOverridesOn=on;
+  for(const k in loaded){
+    const root=loaded[k]; if(!root) continue;
+    root.traverse(o=>{
+      if(!o.isMesh) return;
+      if(on&&o.userData._overrideMat) o.material=o.userData._overrideMat;
+      else if(!on&&o.userData._origMat) o.material=o.userData._origMat;
+    });
+  }
 }
 
 /* ---- loaders: KTX2 + meshopt for the packed flower assets ---- */
@@ -821,6 +1011,7 @@ for(const part of [{key:'bottle',url:'https://media.githubusercontent.com/media/
   const t=performance.now();
   gltfLoader.load(part.url,g=>{
     applyMaterialOverrides(g.scene);
+    toggleMaterialOverrides(false);
     g.scene.name=part.key; scene.add(g.scene); loaded[part.key]=g.scene;
     if(g.animations.length){
       mixer=new THREE.AnimationMixer(g.scene);
@@ -862,6 +1053,11 @@ function tick(){
   const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
   currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
   applyModelTilt(currentU,currentV);
+
+  const baseX=+document.getElementById('lx').value;
+  const baseY=+document.getElementById('ly').value;
+  shadowLight.position.x=baseX+currentU*2;
+  shadowLight.position.y=baseY+currentV*2;
 
   if(mixer) mixer.update(clock.getDelta());
   renderer.render(scene,camera);
