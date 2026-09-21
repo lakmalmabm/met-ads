@@ -756,6 +756,10 @@ else {prompt.classList.add('hidden');}
    =================================================================== */
 const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','bottle.glb','tex/houndstooth.png','tex/label.png','tex/ribbon_normal.jpg'];
 let total=0,got=0,heads=0,phase='download',loadedAt=null;
+/* Any failed load (bad asset, decoder, shader) must show on screen, not leave the timer running. */
+window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loadedAt=-1;
+  const m=(e.reason&&e.reason.message)||String(e.reason);console.error('[ad] load failed',e.reason);
+  loaderText.textContent='load failed: '+m;});
 function loaderTick(){
   if(loadedAt!==null) return;
   const s=(performance.now()/1000).toFixed(1)+' s';
