@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Miss Dior bottle — material rebuild</title>
+<style>
+  :root{
+    /* The stage is locked to the Blender render's aspect so the A/B overlay
+       against ref/frame_392.png lines up 1:1 with no cropping maths. */
+    --render-w: 1080; --render-h: 1920;
+    --ink:#1c1c1e; --dim:#6b6b70; --rule:#e3e3e6; --paper:#f4f4f6;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--paper); color:var(--ink);
+    font:13px/1.5 ui-sans-serif,-apple-system,"SF Pro Text",Segoe UI,sans-serif;
+    display:flex; align-items:center; justify-content:center; gap:28px;
+    padding:20px; overflow:hidden;
+  }
+  .stage{
+    position:relative; height:calc(100vh - 40px);
+    aspect-ratio: var(--render-w) / var(--render-h);
+    border-radius:10px; overflow:hidden;
+    box-shadow:0 8px 40px rgba(0,0,0,.14), 0 0 0 1px rgba(0,0,0,.06);
+    background:#d9dbdf;
+  }
+  .stage canvas{display:block;width:100%;height:100%}
+  /* A/B overlay: the actual Cycles output, same frame, same aspect. */
+  #ab{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; opacity:0; pointer-events:none; transition:opacity .12s;
+  }
+  .panel{width:270px;max-height:calc(100vh - 40px);overflow:auto}
+  .panel h1{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-bottom:2px}
+  .panel h1 + p{color:var(--dim);margin-bottom:16px}
+  .panel h2{
+    font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;
+    color:var(--dim);margin:16px 0 7px;padding-bottom:5px;border-bottom:1px solid var(--rule);
+  }
+  .row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+  .row label{flex:0 0 92px;color:var(--dim);font-size:11px}
+  .row input[type=range]{flex:1;min-width:0;accent-color:var(--ink)}
+  .row output{flex:0 0 42px;text-align:right;font-variant-numeric:tabular-nums;font-size:11px}
+  .btns{display:flex;flex-wrap:wrap;gap:6px}
+  button{
+    font:inherit;font-size:11px;padding:5px 9px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--rule);background:#fff;color:var(--ink);
+  }
+  button:hover{background:#fafafa} button[aria-pressed=true]{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .stats{color:var(--dim);font-size:11px;font-variant-numeric:tabular-nums}
+  .stats b{color:var(--ink);font-weight:600}
+  .note{color:var(--dim);font-size:11px;margin-top:14px;padding-top:10px;border-top:1px solid var(--rule)}
+  code{font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;background:#ebebee;padding:1px 4px;border-radius:3px}
+  @media (max-width:820px){ body{flex-direction:column;gap:12px;overflow:auto}
+    .stage{height:auto;width:100%;max-width:430px} .panel{width:100%;max-width:430px} }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <canvas id="c"></canvas>
+  <img id="ab" src="ref/frame_392.png" alt="">
+</div>
+
+<div class="panel">
+  <h1>Miss Dior bottle</h1>
+  <p>Blender materials, rebuilt.</p>
+
+  <h2>View</h2>
+  <div class="btns">
+    <button id="bBlender" aria-pressed="true">Blender camera</button>
+    <button id="bOrbit" aria-pressed="false">Orbit</button>
+    <button id="bSpin" aria-pressed="false">Spin</button>
+  </div>
+
+  <h2>A/B against Cycles</h2>
+  <div class="row">
+    <label>Reference</label>
+    <input id="sAb" type="range" min="0" max="1" step="0.01" value="0">
+    <output id="oAb">0%</output>
+  </div>
+
+  <h2>Exposure &amp; environment</h2>
+  <div class="row"><label>Exposure</label><input id="sExp" type="range" min="0" max="3" step="0.01" value="1"><output id="oExp">1.00</output></div>
+  <div class="row"><label>Environment</label><input id="sEnv" type="range" min="0" max="3" step="0.01" value="1"><output id="oEnv">1.00</output></div>
+  <div class="row"><label>Light gain</label><input id="sGain" type="range" min="0" max="3" step="0.01" value="1"><output id="oGain">1.00</output></div>
+
+  <h2>The two tuned numbers</h2>
+  <div class="row"><label>Liquid depth</label><input id="sAtt" type="range" min="0.05" max="1.5" step="0.01" value="0.42"><output id="oAtt">0.42</output></div>
+  <div class="row"><label>Pattern bump</label><input id="sBump" type="range" min="0" max="0.02" step="0.0005" value="0.004"><output id="oBump">.004</output></div>
+
+  <h2>Loaded</h2>
+  <div class="stats" id="stats">loading…</div>
+
+  <p class="note">
+    Full derivations in <code>MATERIALS.md</code>. Live tweaks:
+    <code>__bottle.mat('Water 02.002', {roughness: .1})</code>,
+    <code>__bottle.mats()</code>, <code>__bottle.only('glass.004')</code>.
+  </p>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+'use strict';
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { loadBottleTextures, createBottleMaterials, applyBottleMaterials, TUNING } from './materials.js';
+
+/* ===================================================================
+   Blender scene constants — copied verbatim from the verified
+   miss_dior_mobile rig. Do not re-derive these by eye; the camera
+   agreement there was checked numerically to 0.00075 px.
+   =================================================================== */
+
+const CAM = {
+  /* Blender loc (0.015296, -3.969097, -0.011073), rot XYZ (90, 0, 0),
+     already converted Z-up -> Y-up by (x, y, z) -> (x, z, -y). */
+  pos:    [0.015295881778, -0.011073246598, 3.969096660614],
+  target: [0.015295881778, -0.011073246598, 0],
+  /* 90mm on a 36mm sensor with sensor_fit AUTO. AUTO maps the 36mm to the
+     LONGER render axis, and the render is portrait, so 36mm is VERTICAL and
+     the horizontal sensor is 36 * 1080/1920 = 20.25mm.
+     hFOV = 2*atan(20.25/180) = 12.8376 deg. */
+  lensMM: 90, sensorMM: 36, renderW: 1080, renderH: 1920, near: 0.01, far: 1000,
+};
+const H_FOV_RAD = 2 * Math.atan((CAM.sensorMM * CAM.renderW / CAM.renderH) / (2 * CAM.lensMM));
+
+/* Blender area lights are in Watts; three's RectAreaLight is in nits.
+   intensity = P / (area * pi). NOT 683/pi — Cycles already emits radiance in
+   the render's own linear RGB units and three renders in those same units
+   before tone mapping, so the 683 lm/W luminous efficacy constant is a
+   category error that makes every light 683x too bright. */
+const W_TO_NITS = 1 / Math.PI;
+let LIGHT_GAIN = 1.0;
+const LIGHTS = [
+  {name:'Area',    W:150.5,size:[2.290009,2.290009],m:[[2.290008783340454,9.94446954886968e-18,-1.0007170170173445e-16,-0.01010955311357975],[5.353863235432611e-18,2.2634973526000977,0.34744760394096375,1.1622482538223267],[1.004219829126486e-16,-0.34744760394096375,2.2634973526000977,3.7277026176452637],[0,0,0,1]]},
+  {name:'Area.001',W:33.3, size:[2.379771,2.285399],m:[[2.3789494037628174,-0.06004314869642258,-0.0005531621281988919,-0.05178740620613098],[0.013023633509874344,0.4978509247303009,-2.0871574878692627,0.15547463297843933],[0.06115417182445526,2.229705572128296,0.4660077691078186,0.7153764963150024],[0,0,0,1]]},
+  {name:'Area.002',W:5.0,  size:[1.510525,1.510525],m:[[0.6887286901473999,-1.2695475816726685,0.44225364923477173,0.29077789187431335],[0.9892858266830444,0.1421373337507248,-1.1326063871383667,-0.6889719367027283],[0.9103040099143982,0.8060597777366638,0.8962706327438354,0.29528161883354187],[0,0,0,1]]},
+  {name:'Area.003',W:9.1,  size:[2.617539,2.617539],m:[[1,0,0,0.015295881778001785],[0,0.010622496716678143,0.9999435544013977,1.3373398780822754],[0,-0.9999435544013977,0.010622496716678143,0.08211664110422134],[0,0,0,1]]},
+  {name:'Area.004',W:16.6, size:[0.917526,0.917526],m:[[0.7890290021896362,-0.22862040996551514,-0.40868133306503296,-0.4372585713863373],[-0.19595548510551453,0.566074550151825,-0.6949931383132935,-0.5636577010154724],[0.42531073093414307,0.684942901134491,0.4379708766937256,0.5910373330116272],[0,0,0,1]]},
+  {name:'Area.005',W:5.0,  size:[1.510525,1.510525],m:[[1.5105254650115967,0,0,-0.15965536236763],[0,-0.09068802744150162,-1.507800579071045,0.0783577412366867],[0,1.5078004598617554,-0.09068803489208221,-0.987615704536438],[0,0,0,1]]},
+];
+
+const HDRI_URL = 'studio_small_08_2k.hdr', HDRI_ROT_DEG = 16.8;
+const MODEL_URL = 'bottle.glb';
+
+/* The Blender backdrop object ("Plane", Material.001) never made it into the
+   export. Faked as a vertical gradient sampled off ref/frame_392.png. It goes
+   in as scene.background rather than a CSS background specifically so it lands
+   in the transmission render target — otherwise the glass refracts an empty
+   buffer and the bottle reads as a black hole. */
+const BACKDROP = [[0.000,'#d9dbdf'],[0.125,'#d6d8d9'],[0.250,'#cfcfd1'],[0.375,'#cbcbcd'],
+                  [0.500,'#cacacc'],[0.625,'#c4c4c6'],[0.750,'#bbbbbd'],[0.875,'#afafb4'],
+                  [1.000,'#abacb2']];
+
+/* Blender is Z-up, three is Y-up. Applied to a full matrix as C*M it converts
+   the basis vectors too, so a light's local -Z (the emitting face — same
+   convention in both packages) keeps its meaning. */
+const ZUP_TO_YUP = new THREE.Matrix4().makeRotationX(-Math.PI / 2);
+function blenderMatrix(rows) {
+  const m = new THREE.Matrix4().set(
+    rows[0][0], rows[0][1], rows[0][2], rows[0][3],
+    rows[1][0], rows[1][1], rows[1][2], rows[1][3],
+    rows[2][0], rows[2][1], rows[2][2], rows[2][3],
+    rows[3][0], rows[3][1], rows[3][2], rows[3][3]);
+  return new THREE.Matrix4().multiplyMatrices(ZUP_TO_YUP, m);
+}
+
+/* =================================================================== */
+
+const canvas = document.getElementById('c');
+const stage  = canvas.parentElement;
+
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+/* Blender uses Filmic + Medium High Contrast. ACES is the closest three
+   built-in; it rolls highlights off harder than Filmic does, which shows on a
+   creative this high-key. */
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+/* Three transmissive materials stacked (glass, pattern, liquid) is expensive.
+   Half-res transmission is invisible here and roughly doubles frame rate. */
+if ('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale = 0.5;
+
+const scene = new THREE.Scene();
+
+const bg = document.createElement('canvas');
+bg.width = 4; bg.height = 512;
+{
+  const g = bg.getContext('2d').createLinearGradient(0, 0, 0, 512);
+  for (const [stop, col] of BACKDROP) g.addColorStop(stop, col);
+  const cx = bg.getContext('2d'); cx.fillStyle = g; cx.fillRect(0, 0, 4, 512);
+}
+const bgTex = new THREE.CanvasTexture(bg);
+bgTex.colorSpace = THREE.SRGBColorSpace;
+scene.background = bgTex;
+
+const camera = new THREE.PerspectiveCamera(35, 1, CAM.near, CAM.far);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.06;
+controls.target.set(...CAM.target);
+controls.enabled = false;
+
+/* RectAreaLight needs its BRDF lookup tables uploaded once, and only affects
+   MeshStandard/MeshPhysical. It cannot cast shadows in three — the contact
+   shadow under the bottle has to come from a baked map, which this
+   bottle-only export does not carry. */
+RectAreaLightUniformsLib.init();
+const rig = [];
+{
+  const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+  for (const L of LIGHTS) {
+    const area = L.size[0] * L.size[1];
+    const light = new THREE.RectAreaLight(0xffffff, (L.W / area) * W_TO_NITS, L.size[0], L.size[1]);
+    blenderMatrix(L.m).decompose(p, q, s);
+    light.position.copy(p);
+    light.quaternion.copy(q);               // scale is baked into size above
+    light.name = L.name;
+    light.userData.base = light.intensity;
+    rig.push(light); scene.add(light);
+  }
+}
+
+/* World "EasyHDR": studio_small_08_2k.exr was packed in the .blend (its
+   original path is a dead D:/ Windows path); unpacked as Radiance .hdr. The
+   World Mapping node rotates Z by 16.8 deg -> Y in three. */
+new RGBELoader().load(HDRI_URL, (tex) => {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  scene.environment = tex;
+  scene.environmentIntensity = 1.0;
+  scene.environmentRotation = new THREE.Euler(0, THREE.MathUtils.degToRad(HDRI_ROT_DEG), 0);
+}, undefined, (e) => console.warn('[bottle] HDRI failed:', e));
+
+/* --- model + materials --------------------------------------------- */
+
+let bottle = null, materials = null;
+const statsEl = document.getElementById('stats');
+
+const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+
+Promise.all([
+  loadBottleTextures(THREE),
+  new Promise((res, rej) => loader.load(MODEL_URL, res, undefined, rej)),
+]).then(([tex, gltf]) => {
+  materials = createBottleMaterials(THREE, tex);
+  bottle = gltf.scene;
+  const report = applyBottleMaterials(bottle, materials);
+  scene.add(bottle);
+
+  let tris = 0;
+  bottle.traverse((o) => { if (o.isMesh) tris += o.geometry.index.count / 3; });
+  statsEl.innerHTML =
+    `<b>${tris.toLocaleString()}</b> triangles<br>` +
+    `<b>${Object.keys(report.applied).length}</b> of 10 materials applied` +
+    (report.missed.length ? `<br>missed: ${report.missed.join(', ')}` : '');
+  if (report.missed.length) console.warn('[bottle] no override for:', report.missed);
+}).catch((e) => {
+  statsEl.textContent = 'load failed — see console';
+  console.error('[bottle]', e);
+});
+
+/* --- camera modes ---------------------------------------------------- */
+
+let mode = 'blender', spin = false;
+function setMode(next) {
+  mode = next;
+  controls.enabled = (next === 'orbit');
+  document.getElementById('bBlender').ariaPressed = String(next === 'blender');
+  document.getElementById('bOrbit').ariaPressed = String(next === 'orbit');
+  if (next === 'blender') {
+    camera.position.set(...CAM.pos);
+    camera.up.set(0, 1, 0);
+    camera.lookAt(...CAM.target);
+  }
+  resize();
+}
+document.getElementById('bBlender').onclick = () => setMode('blender');
+document.getElementById('bOrbit').onclick   = () => setMode('orbit');
+document.getElementById('bSpin').onclick = (e) => {
+  spin = !spin; e.currentTarget.ariaPressed = String(spin);
+};
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  /* three's .fov is VERTICAL. Blender's hFOV is the invariant we lock to, the
+     same choice the ad makes, so the framing survives a change of aspect. */
+  camera.fov = THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(H_FOV_RAD / 2) / camera.aspect));
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize);
+setMode('blender');
+
+/* --- UI -------------------------------------------------------------- */
+
+const bind = (id, oid, fn, fmt = (v) => v.toFixed(2)) => {
+  const s = document.getElementById(id), o = document.getElementById(oid);
+  const run = () => { const v = parseFloat(s.value); o.textContent = fmt(v); fn(v); };
+  s.oninput = run; run();
+};
+bind('sAb',  'oAb',  (v) => { document.getElementById('ab').style.opacity = v; },
+     (v) => Math.round(v * 100) + '%');
+bind('sExp', 'oExp', (v) => { renderer.toneMappingExposure = v; });
+bind('sEnv', 'oEnv', (v) => { scene.environmentIntensity = v; });
+bind('sGain','oGain',(v) => { LIGHT_GAIN = v; for (const l of rig) l.intensity = l.userData.base * v; });
+bind('sAtt', 'oAtt', (v) => { TUNING.liquidAttenuationDistance = v;
+     if (materials) materials['Water 02.002'].attenuationDistance = v; });
+bind('sBump','oBump',(v) => { TUNING.patternBumpScale = v;
+     if (materials) materials['with pattern.002'].bumpScale = v; }, (v) => v.toFixed(4).slice(1));
+
+/* --- loop ------------------------------------------------------------ */
+
+renderer.setAnimationLoop(() => {
+  if (spin && bottle) bottle.rotation.y += 0.004;
+  if (controls.enabled) controls.update();
+  renderer.render(scene, camera);
+});
+
+/* --- console surface -------------------------------------------------- */
+
+window.__bottle = {
+  scene, camera, renderer, controls, rig, TUNING,
+  get materials() { return materials; },
+  mats() {
+    if (!materials) return 'not loaded';
+    return Object.fromEntries(Object.entries(materials).map(([k, m]) => [k, {
+      color: m.color?.getStyle(), metalness: m.metalness, roughness: m.roughness,
+      ior: m.ior, transmission: m.transmission, thickness: m.thickness,
+    }]));
+  },
+  mat(name, props) {
+    const m = materials?.[name];
+    if (!m) return `no material "${name}" — try __bottle.mats()`;
+    Object.assign(m, props); m.needsUpdate = true; return m;
+  },
+  /* Isolate one material to see exactly which surfaces carry it. */
+  only(name) {
+    bottle?.traverse((o) => {
+      if (!o.isMesh) return;
+      const list = Array.isArray(o.material) ? o.material : [o.material];
+      o.visible = !name || list.some((m) => m.name === name || m === materials?.[name]);
+    });
+  },
+  all() { bottle?.traverse((o) => { if (o.isMesh) o.visible = true; }); },
+  view: setMode,
+  ab(v) { document.getElementById('sAb').value = v; document.getElementById('sAb').oninput(); },
+};
+console.info('[bottle] ready — window.__bottle');
+</script>
+</body>
+</html>

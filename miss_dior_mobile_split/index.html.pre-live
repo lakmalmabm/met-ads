@@ -674,29 +674,73 @@
 <script type="module">
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 
 /* ===================================================================
-   LIVE BOTTLE (replaces the 357 MB model.glb build; previous version in
-   index.html.pre-live).
-   - Background: the Blender scene rendered in Cycles with the bottle made
-     invisible to camera/reflection/refraction (it still casts its shadow),
-     20% overscan. Drawn as a screen quad in scene-linear so the glass
-     refracts it correctly.
-   - Bottle: 2.9 MB Draco GLB, every part baked to world space (the body's
-     non-uniform scale made the parented bow export skewed). Materials are
-     rebuilt from the node trees - the exporter only sees grey because of
-     the Mx White group.
-   - Tone mapping: Blender Filmic + Medium High Contrast, sampled from
-     Blender itself into a LUT (live/filmic_lut.json), not ACES.
-   - Tilt: this file's model-tilt rig; the camera and background stay fixed.
+   SPLIT EXPERIMENT - instanced flowers
+   Camera and light rig are the verified ones; do not diverge.
+   The flowers no longer ship as an 8.7M-triangle bake. In Blender they
+   were always curves + Geometry Nodes scattering a small library, and
+   the exporter had flattened every instance into unique triangles. We
+   ship the library once (48 meshes, 45k tris) plus 5,091 transforms and
+   rebuild with InstancedMesh: 320 MB -> 4.1 MB.
    =================================================================== */
-const ROOT='/miss_dior_mobile_split/live/';
+
+const B2T = new THREE.Matrix4().set(1,0,0,0,  0,0,1,0,  0,-1,0,0,  0,0,0,1);
+const T2B = B2T.clone().invert();
+function blenderMatrix(r){
+  const m=new THREE.Matrix4().set(
+    r[0][0],r[0][1],r[0][2],r[0][3], r[1][0],r[1][1],r[1][2],r[1][3],
+    r[2][0],r[2][1],r[2][2],r[2][3], r[3][0],r[3][1],r[3][2],r[3][3]);
+  return new THREE.Matrix4().multiplyMatrices(B2T,m);
+}
+
+const CAM={pos:[0.015295881778,-0.011073246598,3.969096660614],
+           target:[0.015295881778,-0.011073246598,0],
+           lensMM:90,sensorMM:36,renderW:1080,renderH:1920,near:0.1,far:1000};
+const H_FOV_RAD=2*Math.atan((CAM.sensorMM*CAM.renderW/CAM.renderH)/(2*CAM.lensMM));
+
+const LIGHT_GAIN=1.0, W_TO_NITS=1/Math.PI;   /* NOT 683/pi */
+const LIGHTS=[
+  {name:'Area',    W:150.5,size:[2.290009,2.290009],m:[[2.290008783340454,9.94446954886968e-18,-1.0007170170173445e-16,-0.01010955311357975],[5.353863235432611e-18,2.2634973526000977,0.34744760394096375,1.1622482538223267],[1.004219829126486e-16,-0.34744760394096375,2.2634973526000977,3.7277026176452637],[0,0,0,1]]},
+  {name:'Area.001',W:33.3, size:[2.379771,2.285399],m:[[2.3789494037628174,-0.06004314869642258,-0.0005531621281988919,-0.05178740620613098],[0.013023633509874344,0.4978509247303009,-2.0871574878692627,0.15547463297843933],[0.06115417182445526,2.229705572128296,0.4660077691078186,0.7153764963150024],[0,0,0,1]]},
+  {name:'Area.002',W:5.0,  size:[1.510525,1.510525],m:[[0.6887286901473999,-1.2695475816726685,0.44225364923477173,0.29077789187431335],[0.9892858266830444,0.1421373337507248,-1.1326063871383667,-0.6889719367027283],[0.9103040099143982,0.8060597777366638,0.8962706327438354,0.29528161883354187],[0,0,0,1]]},
+  {name:'Area.003',W:9.1,  size:[2.617539,2.617539],m:[[1,0,0,0.015295881778001785],[0,0.010622496716678143,0.9999435544013977,1.3373398780822754],[0,-0.9999435544013977,0.010622496716678143,0.08211664110422134],[0,0,0,1]]},
+  {name:'Area.004',W:16.6, size:[0.917526,0.917526],m:[[0.7890290021896362,-0.22862040996551514,-0.40868133306503296,-0.4372585713863373],[-0.19595548510551453,0.566074550151825,-0.6949931383132935,-0.5636577010154724],[0.42531073093414307,0.684942901134491,0.4379708766937256,0.5910373330116272],[0,0,0,1]]},
+  {name:'Area.005',W:5.0,  size:[1.510525,1.510525],m:[[1.5105254650115967,0,0,-0.15965536236763],[0,-0.09068802744150162,-1.507800579071045,0.0783577412366867],[0,1.5078004598617554,-0.09068803489208221,-0.987615704536438],[0,0,0,1]]}
+];
+
+const HDRI_URL='/miss_dior_mobile_split/studio_small_08_2k.hdr', HDRI_ROT_DEG=16.8, ENV_INTENSITY=1.0;
+const BACKDROP=[[0.000,'#d9dbdf'],[0.125,'#d6d8d9'],[0.250,'#cfcfd1'],[0.375,'#cbcbcd'],
+                [0.500,'#cacacc'],[0.625,'#c4c4c6'],[0.750,'#bbbbbd'],[0.875,'#afafb4'],
+                [1.000,'#abacb2']];
+
+const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
+const MATERIAL_OVERRIDES={
+  /* Panel: Blender Glass BSDF, IOR 0.84. three clamps ior to [1, 2.333],
+     so match normal-incidence Fresnel instead: R0=((n-1)/(n+1))^2 gives
+     n=1.19 for the same rim brightness. thickness = Solidify's 0.014. */
+  'Material.003':{color:lin(1,1,1),roughness:0.0,metalness:0,transmission:1,ior:1.19,thickness:0.014},
+  'glass.004':{color:lin(1,1,1),roughness:0.0,metalness:0,transmission:1,ior:1.45,thickness:0.30},
+  'glass.005':{color:lin(1,0.9041,0.9167),roughness:0.0,metalness:0,transmission:1,ior:2.06,thickness:0.16},
+  'with pattern.002':{color:lin(1,1,1),roughness:0.1722,metalness:0,transmission:1,ior:1.45,
+                      thickness:0.30,bumpMap:'/miss_dior_mobile_split/tex/houndstooth.png',bumpScale:0.375},
+  'Water 02.002':{color:lin(1,0.0446,0.2907),roughness:0.0,metalness:0,transmission:1,ior:1.45,
+                  thickness:0.25,attenuationColor:lin(1,0.0446,0.2907),attenuationDistance:0.5},
+  'Material.020':{color:lin(0.8,0.8,0.8),metalness:1.0,roughness:0.10},
+  'Ribbon.001':{color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,
+                normalMap:'/miss_dior_mobile_split/tex/ribbon_normal.png'},
+  'RIBBONZ':{color:lin(0.011,0.0092,0.0092),metalness:0,roughness:0.55},
+  'Material.026':{color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667},
+  'Material.029':{color:lin(0.01,0.01,0.01),metalness:0,roughness:0.36}
+};
+
 /* ---- motion input (see the main build for the full rationale) ---- */
-const EASE=0.3;
-let MAX_YAW_DEG=30, MAX_PITCH_DEG=30, INPUT_RANGE_DEG=45;
+const EASE=0.08;
+let MAX_YAW_DEG=25, MAX_PITCH_DEG=20, INPUT_RANGE_DEG=25;
 const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1;
 
 const canvas=document.getElementById('stage');
@@ -741,8 +785,7 @@ function onPointer(e){
 }
 window.addEventListener('pointermove',onPointer,{passive:true});
 window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;}},{passive:true});
-/* desktop Chrome also exposes requestPermission, so gate on touch or the prompt shows on laptops */
-const needsPermission=isTouchDevice&&typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
+const needsPermission=typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
 if(needsPermission){
   prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
     .then(s=>{if(s==='granted')startGyro();else prompt.classList.add('hidden');})
@@ -750,235 +793,248 @@ if(needsPermission){
 } else if('DeviceOrientationEvent' in window){prompt.classList.add('hidden');startGyro();}
 else {prompt.classList.add('hidden');}
 
-
-/* ===================================================================
-   LOADING - byte progress + wall clock from navigation start
-   =================================================================== */
-const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','bottle.glb','tex/houndstooth.png','tex/label.png','tex/ribbon_normal.jpg'];
-let total=0,got=0,heads=0,phase='download',loadedAt=null;
-function loaderTick(){
-  if(loadedAt!==null) return;
-  const s=(performance.now()/1000).toFixed(1)+' s';
-  const pct=heads===ASSETS.length&&total?Math.min(99,Math.round(got/total*100)):0;
-  loaderText.textContent=phase==='download'?`loading ${pct}%  ·  ${s}`:`preparing 3D  ·  ${s}`;
-  bar.style.width=(phase==='download'?pct:100)+'%';
-  requestAnimationFrame(loaderTick);
-}
-loaderTick();
-async function fetchP(u){
-  const r=await fetch(ROOT+u); if(!r.ok) throw new Error(u+' '+r.status);
-  total+=+r.headers.get('content-length')||0; heads++;
-  const rd=r.body.getReader(),parts=[];
-  for(;;){const {done,value}=await rd.read(); if(done) break; parts.push(value); got+=value.length;}
-  return new Blob(parts);
-}
-const BLOB=Object.fromEntries(ASSETS.map(u=>[u,fetchP(u)]));
-Promise.all(Object.values(BLOB)).then(()=>{phase='prepare';}).catch(e=>{console.error('[ad]',e);loaderText.textContent='load failed: '+e.message;});
-const blobURL=async u=>URL.createObjectURL(await BLOB[u]);
-const getJSON=async u=>JSON.parse(await (await BLOB[u]).text());
-const loadImg=u=>blobURL(u).then(src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('bad image '+u));i.src=src;}));
-
-const [SC,LUT]=await Promise.all([getJSON('scene.json'),getJSON('filmic_lut.json')]);
-
-/* ---- Filmic + Medium High Contrast, as a CustomToneMapping ---- */
-const N=128,LO=-14,HI=8;
-function lutAt(x){const Li=LUT.lin,D=LUT.disp;if(x<=0)return 0;if(x>=Li[Li.length-1])return D[D.length-1];
-  let i=1;while(Li[i]<x)i++;return D[i-1]+(x-Li[i-1])/(Li[i]-Li[i-1])*(D[i]-D[i-1]);}
-const FWD=Array.from({length:N},(_,k)=>lutAt(2**(LO+(HI-LO)*k/(N-1))));
-const lutGLSL=name=>`const float ${name}[${N}] = float[${N}](${FWD.map(v=>v.toFixed(6)).join(',')});`;
-const f1=v=>v.toFixed(1);
-const beforeTM=THREE.ShaderChunk.tonemapping_pars_fragment;
-THREE.ShaderChunk.tonemapping_pars_fragment=beforeTM.replace(/vec3 CustomToneMapping\( vec3 color \) \{ return color; \}/,`
-${lutGLSL('FILMIC_LUT')}
-float filmicCh(float x){
-  if (x <= 0.0) return 0.0;
-  float l = (log2(x) - (${f1(LO)})) / ${f1(HI-LO)} * ${f1(N-1)};
-  if (l <= 0.0) return FILMIC_LUT[0] * x / exp2(${f1(LO)});
-  l = min(l, ${f1(N-1)});
-  int i = int(floor(l)); int j = min(i + 1, ${N-1});
-  return mix(FILMIC_LUT[i], FILMIC_LUT[j], l - float(i));
-}
-vec3 CustomToneMapping( vec3 color ) {
-  color *= toneMappingExposure;
-  vec3 d = vec3(filmicCh(color.r), filmicCh(color.g), filmicCh(color.b));
-  return mix(d / 12.92, pow((d + 0.055) / 1.055, vec3(2.4)), step(0.04045, d));
-}`);
-if(THREE.ShaderChunk.tonemapping_pars_fragment===beforeTM) console.warn('[ad] Filmic tone mapping hook failed');
-
 /* ===================================================================
    SCENE
    =================================================================== */
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+renderer.toneMapping=THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure=0.35;
 renderer.outputColorSpace=THREE.SRGBColorSpace;
-renderer.toneMapping=THREE.CustomToneMapping;
-renderer.toneMappingExposure=1;
+renderer.shadowMap.enabled=true;
+renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+
 const scene=new THREE.Scene();
+(function(){
+  const c=document.createElement('canvas');c.width=4;c.height=512;
+  const ctx=c.getContext('2d');const g=ctx.createLinearGradient(0,0,0,512);
+  for(const [s,col] of BACKDROP) g.addColorStop(s,col);
+  ctx.fillStyle=g;ctx.fillRect(0,0,4,512);
+  const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;scene.background=t;
+})();
 
-const B2T=new THREE.Matrix4().set(1,0,0,0, 0,0,1,0, 0,-1,0,0, 0,0,0,1);   /* Blender Z-up -> three Y-up */
-const b2t=mw=>B2T.clone().multiply(new THREE.Matrix4().set(...mw));
-/* Portrait render with sensor_fit AUTO: the 36 mm is the VERTICAL axis. Lock
-   the horizontal FOV to Blender's and derive vertical from .ad's aspect -
-   same frustum rule as before, so the framing match carries over. */
-const RES=SC.camera.res, TAN_W=(SC.camera.sensor/2)/SC.camera.lens*(RES[0]/RES[1]);
-const H_FOV_RAD=2*Math.atan(TAN_W);
-const camera=new THREE.PerspectiveCamera(50,1,0.1,100);
-{const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();b2t(SC.camera.mw).decompose(p,q,s);camera.position.copy(p);camera.quaternion.copy(q);}
-const PIVOT=new THREE.Vector3(0.0107,-0.0735,0.0466);   /* bottle centre: Blender (0.0107,-0.0466,-0.0735) */
+const camera=new THREE.PerspectiveCamera(50,1,CAM.near,CAM.far);
+camera.position.set(...CAM.pos); camera.lookAt(...CAM.target);
+const PIVOT=new THREE.Vector3(...CAM.target);
 
-/* ---- background: Cycles frame, overscan 1.2, mapped by view ray ---- */
-const OS=1.2, TAN_H_OS=(SC.camera.sensor/2)/SC.camera.lens*OS, TAN_W_OS=TAN_H_OS*RES[0]/RES[1];
-const bgImg=await loadImg('bg.png');
-const bgTex=new THREE.Texture(bgImg);bgTex.colorSpace=THREE.NoColorSpace;bgTex.generateMipmaps=false;bgTex.minFilter=THREE.LinearFilter;bgTex.needsUpdate=true;
-const bgMat=new THREE.ShaderMaterial({
-  uniforms:{tBg:{value:bgTex},uInvProj:{value:camera.projectionMatrixInverse},uTan:{value:new THREE.Vector2(TAN_W_OS,TAN_H_OS)}},
-  vertexShader:'varying vec2 vNdc; void main(){ vNdc = position.xy; gl_Position = vec4(position.xy, 0.9999, 1.0); }',
-  fragmentShader:`
-uniform sampler2D tBg; uniform mat4 uInvProj; uniform vec2 uTan; varying vec2 vNdc;
-${lutGLSL('BG_LUT')}
-/* The PNG is Filmic display values; undo the curve so the glass refracts
-   scene-linear light, and the final pass re-applies it (round trip is exact). */
-float invFilmic(float d){
-  if (d <= BG_LUT[0]) return d / max(BG_LUT[0], 1e-6) * exp2(${f1(LO)});
-  int lo = 0, hi = ${N-1};
-  for (int k = 0; k < 8; k++) { int m = (lo + hi) / 2; if (BG_LUT[m] <= d) lo = m; else hi = m; }
-  float a = BG_LUT[lo], b = BG_LUT[hi]; float t = b > a ? clamp((d - a) / (b - a), 0.0, 1.0) : 0.0;
-  return exp2(${f1(LO)} + (float(lo) + t * float(hi - lo)) / ${f1(N-1)} * ${f1(HI-LO)});
-}
-void main(){
-  vec4 v = uInvProj * vec4(vNdc, 0.0, 1.0); v.xyz /= v.w;
-  vec2 uv = 0.5 + 0.5 * (v.xy / -v.z) / uTan;
-  vec3 d = texture(tBg, uv).rgb;
-  gl_FragColor = vec4(invFilmic(d.r), invFilmic(d.g), invFilmic(d.b), 1.0);
-  #include <tonemapping_fragment>
-  #include <colorspace_fragment>
-}`,depthTest:false,depthWrite:false});
-const bg=new THREE.Mesh(new THREE.PlaneGeometry(2,2),bgMat);bg.frustumCulled=false;bg.renderOrder=-1000;scene.add(bg);
-
-/* ---- environment: studio HDRI with the world's 0.5 strength baked in ---- */
-const envP=blobURL('env.hdr').then(u=>new RGBELoader().loadAsync(u)).then(t=>{
-  t.mapping=THREE.EquirectangularReflectionMapping;scene.environment=t;
-  scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(163.2),0);   /* Blender Mapping Z 16.8 deg, +180 for three's equirect seam */
-});
-
-/* ---- lights: Blender area lights, radiance P/(A*pi), with light linking ---- */
-RectAreaLightUniformsLib.init();
-const rig=[];
-for(const Lt of SC.lights){
-  const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();b2t(Lt.mw).decompose(p,q,s);
-  const w=Lt.size[0]*s.x,h=Lt.size[1]*s.y;
-  const l=new THREE.RectAreaLight(new THREE.Color(...Lt.color),Lt.power/(Math.PI*w*h),w,h);
-  l.position.copy(p);l.quaternion.copy(q);l.name=Lt.name;l.userData.baseIntensity=l.intensity;rig.push(l);scene.add(l);
-}
-const san=n=>THREE.PropertyBinding.sanitizeNodeName(n);
-function maskFor(objName){   /* Area.002 lights only the body, Area.004 only one bow piece */
-  return SC.lights.map(Lt=>{const lst=SC.linking[Lt.name]||[];if(!lst.length)return 1;
-    const inc=lst.filter(e=>e[1]==='INCLUDE').map(e=>san(e[0])),exc=lst.filter(e=>e[1]==='EXCLUDE').map(e=>san(e[0]));
-    if(exc.includes(objName))return 0;if(inc.length&&!inc.includes(objName))return 0;return 1;});
-}
-
-/* ---- textures, pre-processed exactly as the node trees use them ---- */
-const srgb2lin=c=>c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4;
-const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
-async function procTex(u,fns){
-  const img=await loadImg(u);const cv=document.createElement('canvas');cv.width=img.width;cv.height=img.height;
-  const g=cv.getContext('2d');g.drawImage(img,0,0);const src=g.getImageData(0,0,cv.width,cv.height).data;
-  return fns.map(fn=>{const out=new ImageData(cv.width,cv.height),o=out.data;
-    for(let i=0;i<src.length;i+=4){const c=fn(srgb2lin(src[i]/255),srgb2lin(src[i+1]/255),srgb2lin(src[i+2]/255));o[i]=c[0]*255;o[i+1]=c[1]*255;o[i+2]=c[2]*255;o[i+3]=255;}
-    const c2=document.createElement('canvas');c2.width=cv.width;c2.height=cv.height;c2.getContext('2d').putImageData(out,0,0);
-    const t=new THREE.CanvasTexture(c2);t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;});
-}
-const GA=1.4482,GB=[0.7531*0.97,0.8582*0.97,0.9999*0.97];   /* the two glasses of 'with pattern.002' */
-const texP=Promise.all([
-  procTex('tex/houndstooth.png',[
-    (r,g,b)=>{const f=lum(r,g,b);return [0,1,2].map(k=>(GB[k]*(1-f)+GA*f)/GA);},
-    (r,g,b)=>{const f=lum(r,g,b);return [0,0.1722*f,0];},
-    (r,g,b)=>{const f=lum(r,g,b);return [f,f,f];}]),
-  procTex('tex/label.png',[(r,g,b)=>{const t=Math.min(1,Math.max(0,(lum(r,g,b)-0.2864)/(1-0.2864)));return [t,t,t];}]),
-  blobURL('tex/ribbon_normal.jpg').then(u=>new THREE.TextureLoader().loadAsync(u)),
-]);
-
-/* ---- bottle: decode in parallel with the textures ---- */
-const draco=new DRACOLoader().setDecoderPath('/miss_dior_mobile_split/vendor/jsm/libs/draco/gltf/');
-const gltfP=blobURL('bottle.glb').then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
-const [[[patColor,patRough,houndBump],[labelTex],ribN],gltf]=await Promise.all([texP,gltfP,envP]);
-ribN.colorSpace=THREE.NoColorSpace;ribN.flipY=false;ribN.wrapS=ribN.wrapT=THREE.RepeatWrapping;ribN.repeat.set(4.56,4.56*Math.cos(0.281));ribN.anisotropy=8;
-
-/* ---- materials, rebuilt from the Blender node trees (values are linear) ---- */
-const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
-const BUMP=`
-vec3 bumpN(vec3 N, float h, float strength){
-  vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
-  float dhx = dFdx(h), dhy = dFdy(h);
-  vec3 r1 = cross(dpy, N), r2 = cross(N, dpx); float det = dot(dpx, r1);
-  vec3 g = sign(det) * (dhx * r1 + dhy * r2);
-  return normalize(mix(N, normalize(abs(det) * N - g), strength));
-}
-float aaWave(float ph){ float fw = fwidth(ph); float amp = clamp(1.0 - fw / 3.14159, 0.0, 1.0); return 0.5 + 0.5 * amp * sin(ph - 1.5708); }`;
-const PATCH={
-  RIBBONZ:{head:BUMP,color:`float wv = aaWave(1000.0 * (vUv.x * 0.66913 - (1.0 - vUv.y) * 0.74314));`,
-    rough:`roughnessFactor = mix(0.2021, 1.0, clamp((wv - 0.1955) / 0.3, 0.0, 1.0));`,normal:`normal = bumpN(normal, wv, 0.2);`},
-  'Material.029':{head:BUMP,color:`float wv = aaWave(280.0 * vUv.x + 16000.0); diffuseColor.rgb = vec3(mix(0.02, 0.0, clamp(wv / 0.5045, 0.0, 1.0)));`,
-    rough:`roughnessFactor = mix(0.5651, 0.1666, clamp(wv / 0.5091, 0.0, 1.0));`,normal:`normal = bumpN(normal, wv, 0.45);`},
-  'Material.021':{head:'',color:`{ vec2 q = vUv * 220.0; q = vec2(q.x + q.y, q.y - q.x) * 0.70711; float f1 = length(fract(q) - 0.5);
-      float fade = clamp(1.0 - fwidth(q.x) * 1.5, 0.0, 1.0); diffuseColor.rgb *= 0.5 + 0.5 * mix(0.3826, f1, fade); }`},
-};
-function makeMat(mname,objName){
-  let m;
-  switch(mname){
-    case 'glass.004':m=new THREE.MeshPhysicalMaterial({color:lin(1.8087,1.8087,1.8087),specularColor:lin(1.8087,1.8087,1.8087),roughness:0,metalness:0,transmission:1,ior:1.45,thickness:0.25});break;
-    case 'with pattern.002':m=new THREE.MeshPhysicalMaterial({color:lin(GA,GA,GA),map:patColor,specularColor:lin(GA,GA,GA),specularColorMap:patColor,
-      roughness:1,roughnessMap:patRough,metalness:0,transmission:1,ior:1.45,thickness:0.25,bumpMap:houndBump,bumpScale:0.004});break;
-    case 'glass.005':m=new THREE.MeshPhysicalMaterial({color:lin(1,0.9041,0.9167),specularColor:lin(1,0.9041,0.9167),roughness:0,metalness:0,transmission:1,ior:2.06,thickness:0.3});break;
-    case 'Water 02.002':m=new THREE.MeshPhysicalMaterial({color:lin(1.1,0.0491,0.3198),specularColor:lin(1.05,0.5245,0.6599),roughness:0,metalness:0,transmission:1,ior:1.45,thickness:0.4,
-      emissive:lin(1.1,0.0491,0.3198),emissiveIntensity:0.01});break;
-    case 'Material.020':m=new THREE.MeshPhysicalMaterial({color:lin(0.8,0.8,0.8),metalness:1,roughness:0.1});break;
-    case 'Material.021':m=new THREE.MeshPhysicalMaterial({color:0xffffff,map:labelTex,metalness:0.6227,roughness:0.3964});break;
-    case 'Ribbon.001':m=new THREE.MeshPhysicalMaterial({color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,normalMap:ribN,normalScale:new THREE.Vector2(0.74,0.74)});break;
-    case 'RIBBONZ':m=new THREE.MeshPhysicalMaterial({color:lin(0.011,0.0092,0.0092),metalness:0,roughness:1,specularIntensity:0.275});break;
-    case 'Material.026':m=new THREE.MeshPhysicalMaterial({color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667,ior:1.5});break;
-    case 'Material.029':m=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:0,roughness:1});break;
-    default:console.warn('[ad] unknown material',mname);m=new THREE.MeshPhysicalMaterial({color:0xff00ff});
-  }
-  m.name=mname; m.side=THREE.DoubleSide;   /* Blender renders both faces; the bow is single-sided planes */
-  const mask=maskFor(objName),patch=PATCH[mname];
-  if(patch) m.defines={USE_UV:''};
-  m.onBeforeCompile=sh=>{
-    let f=sh.fragmentShader;
-    const lfb=THREE.ShaderChunk.lights_fragment_begin.replace('rectAreaLight = rectAreaLights[ i ];','rectAreaLight = rectAreaLights[ i ]; rectAreaLight.color *= LLMASK[ i ];');
-    if(lfb===THREE.ShaderChunk.lights_fragment_begin) console.warn('[ad] light-link hook failed');
-    f=f.replace('#include <lights_fragment_begin>',lfb);
-    f=`const float LLMASK[${mask.length}] = float[${mask.length}](${mask.map(f1).join(',')});\n`+f;
-    if(patch){
-      f=f.replace('void main() {',patch.head+'\nvoid main() {');
-      if(patch.color) f=f.replace('#include <color_fragment>','#include <color_fragment>\n'+patch.color);
-      if(patch.rough) f=f.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+patch.rough);
-      if(patch.normal) f=f.replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+patch.normal);
-    }
-    sh.fragmentShader=f;
-  };
-  m.customProgramCacheKey=()=>mname+'|'+mask.join('');
-  return m;
-}
-
-const bottle=gltf.scene;
-const tiltRoot=new THREE.Group();tiltRoot.position.copy(PIVOT);scene.add(tiltRoot);
-bottle.position.copy(PIVOT).negate();tiltRoot.add(bottle);
-const AUTOMAP=new Set([' base glass.002','inner part.002','label.002','spray cap.002'].map(san));
-bottle.traverse(o=>{
-  if(!o.isMesh) return;
-  const objName=((o.parent&&o.parent.type==='Group'&&o.parent!==bottle)?o.parent.name:o.name).replace(/__w(_\d+)?$/,'');
-  const g=o.geometry; if(AUTOMAP.has(objName)&&g.attributes.uv1) g.setAttribute('uv',g.attributes.uv1);   /* Blender's active render UV */
-  o.material=makeMat(o.material.name,objName);
-});
-
-/* ---- model tilt: same rig as before, now on the bottle's pivot ---- */
-const _yawAxis=new THREE.Vector3(0,1,0),_pitchAxis=new THREE.Vector3(1,0,0);
-const _yawQ=new THREE.Quaternion(),_pitchQ=new THREE.Quaternion();
+const _yawAxis=new THREE.Vector3(0,1,0);
+const _pitchAxis=new THREE.Vector3(1,0,0);
+const _yawQ=new THREE.Quaternion();
+const _pitchQ=new THREE.Quaternion();
+const _tiltQ=new THREE.Quaternion();
 function applyModelTilt(u,v){
   _yawQ.setFromAxisAngle(_yawAxis,u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
   _pitchQ.setFromAxisAngle(_pitchAxis,v*THREE.MathUtils.degToRad(MAX_PITCH_DEG));
-  tiltRoot.quaternion.copy(_yawQ).multiply(_pitchQ);
+  _tiltQ.copy(_yawQ).multiply(_pitchQ);
+  for(const k in loaded){
+    const obj=loaded[k]; if(!obj) continue;
+    if(!obj.userData._baseQ) obj.userData._baseQ=obj.quaternion.clone();
+    obj.quaternion.copy(obj.userData._baseQ).premultiply(_tiltQ);
+  }
+}
+
+RectAreaLightUniformsLib.init();
+const rig=[],_p=new THREE.Vector3(),_q=new THREE.Quaternion(),_s=new THREE.Vector3();
+for(const L of LIGHTS){
+  const area=L.size[0]*L.size[1];
+  const l=new THREE.RectAreaLight(0xffffff,(L.W/area)*W_TO_NITS*LIGHT_GAIN,L.size[0],L.size[1]);
+  blenderMatrix(L.m).decompose(_p,_q,_s);
+  l.position.copy(_p); l.quaternion.copy(_q); l.name=L.name;
+  l.userData.baseIntensity=l.intensity; rig.push(l); scene.add(l);
+}
+const AREA_OVERRIDES=[28.9,0,0,0,9,0];
+rig.forEach((l,i)=>{l.intensity=AREA_OVERRIDES[i];l.userData.baseIntensity=l.intensity;});
+
+new RGBELoader().load(HDRI_URL,t=>{
+  t.mapping=THREE.EquirectangularReflectionMapping;
+  scene.environment=t; scene.environmentIntensity=ENV_INTENSITY;
+  scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(HDRI_ROT_DEG),0);
+},undefined,e=>console.warn('[ad] HDRI failed',e));
+
+/* ---- white box backdrop + shadow ---- */
+const boxMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.9,metalness:0,side:THREE.FrontSide});
+let BOX_W=0.76, BOX_H=1.12, BOX_D=1;
+const boxGroup=new THREE.Group();
+boxGroup.name='backdrop';
+const edgeMat=new THREE.LineBasicMaterial({color:0x666666,linewidth:2});
+let showEdges=true;
+function buildBox(){
+  while(boxGroup.children.length) boxGroup.remove(boxGroup.children[0]);
+  const walls=[];
+  const back=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_H),boxMat);
+  back.position.set(0,0,-BOX_D/2); back.receiveShadow=true; walls.push(back);
+  const floor=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_D),boxMat);
+  floor.rotation.x=-Math.PI/2; floor.position.set(0,-BOX_H/2,0); floor.receiveShadow=true; walls.push(floor);
+  const ceil=new THREE.Mesh(new THREE.PlaneGeometry(BOX_W,BOX_D),boxMat);
+  ceil.rotation.x=Math.PI/2; ceil.position.set(0,BOX_H/2,0); walls.push(ceil);
+  const left=new THREE.Mesh(new THREE.PlaneGeometry(BOX_D,BOX_H),boxMat);
+  left.rotation.y=Math.PI/2; left.position.set(-BOX_W/2,0,0); left.receiveShadow=true; walls.push(left);
+  const right=new THREE.Mesh(new THREE.PlaneGeometry(BOX_D,BOX_H),boxMat);
+  right.rotation.y=-Math.PI/2; right.position.set(BOX_W/2,0,0); right.receiveShadow=true; walls.push(right);
+  for(const w of walls){
+    const edges=new THREE.LineSegments(new THREE.EdgesGeometry(w.geometry),edgeMat);
+    edges.visible=showEdges;
+    w.add(edges);
+    boxGroup.add(w);
+  }
+}
+buildBox();
+scene.add(boxGroup);
+
+const shadowLight=new THREE.DirectionalLight(0xffffff,5);
+shadowLight.position.set(6.4,1.03,4.6);
+shadowLight.target.position.set(0,0,0);
+shadowLight.castShadow=true;
+shadowLight.shadow.mapSize.set(1024,1024);
+shadowLight.shadow.camera.near=0.1;
+shadowLight.shadow.camera.far=10;
+shadowLight.shadow.camera.left=-2;
+shadowLight.shadow.camera.right=2;
+shadowLight.shadow.camera.top=2;
+shadowLight.shadow.camera.bottom=-2;
+shadowLight.shadow.bias=-0.002;
+scene.add(shadowLight);
+scene.add(shadowLight.target);
+
+document.getElementById('lx').oninput=function(){shadowLight.position.x=+this.value;document.getElementById('lx-v').textContent=this.value;};
+document.getElementById('ly').oninput=function(){shadowLight.position.y=+this.value;document.getElementById('ly-v').textContent=this.value;};
+document.getElementById('lz').oninput=function(){shadowLight.position.z=+this.value;document.getElementById('lz-v').textContent=this.value;};
+document.getElementById('lb').oninput=function(){shadowLight.intensity=+this.value;document.getElementById('lb-v').textContent=this.value;};
+document.getElementById('t-shadow').onchange=function(){shadowLight.visible=this.checked;};
+
+const areaContainer=document.getElementById('area-controls');
+rig.forEach((l,i)=>{
+  const id='a'+i;
+  const row=document.createElement('label');
+  row.innerHTML=l.name+' <input type="range" id="'+id+'" min="0" max="50" step="0.1" value="'+l.intensity.toFixed(1)+'"><span class="val" id="'+id+'-v">'+l.intensity.toFixed(1)+'</span>';
+  areaContainer.appendChild(row);
+  document.getElementById(id).oninput=function(){l.intensity=+this.value;document.getElementById(id+'-v').textContent=this.value;};
+});
+document.getElementById('t-area').onchange=function(){for(const l of rig) l.visible=this.checked;};
+
+document.getElementById('bw').oninput=function(){BOX_W=+this.value;document.getElementById('bw-v').textContent=this.value;buildBox();};
+document.getElementById('bh').oninput=function(){BOX_H=+this.value;document.getElementById('bh-v').textContent=this.value;buildBox();};
+document.getElementById('bd').oninput=function(){BOX_D=+this.value;document.getElementById('bd-v').textContent=this.value;buildBox();};
+document.getElementById('t-edges').onchange=function(){showEdges=this.checked;boxGroup.traverse(o=>{if(o.isLineSegments)o.visible=showEdges;});};
+document.getElementById('t-matoverride').onchange=function(){toggleMaterialOverrides(this.checked);};
+document.getElementById('cam-z').oninput=function(){camera.position.z=+this.value;document.getElementById('cam-z-v').textContent=this.value;};
+
+document.getElementById('hdri-int').oninput=function(){scene.environmentIntensity=+this.value;document.getElementById('hdri-v').textContent=this.value;};
+document.getElementById('exposure').oninput=function(){renderer.toneMappingExposure=+this.value;document.getElementById('exp-v').textContent=this.value;};
+
+document.getElementById('copy-btn').onclick=function(){
+  const v={
+    shadowLight:{x:shadowLight.position.x,y:shadowLight.position.y,z:shadowLight.position.z,intensity:shadowLight.intensity,visible:shadowLight.visible},
+    areaLights:rig.map(l=>({name:l.name,intensity:+l.intensity.toFixed(2),visible:l.visible})),
+    box:{width:BOX_W,height:BOX_H,depth:BOX_D},
+    hdri:scene.environmentIntensity,
+    exposure:renderer.toneMappingExposure
+  };
+  navigator.clipboard.writeText(JSON.stringify(v,null,2)).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy values';},1500);});
+};
+
+/* ---- material overrides ---- */
+const texLoader=new THREE.TextureLoader(),texCache={};
+function getTex(u){
+  if(!texCache[u]){const t=texLoader.load(u);t.wrapS=t.wrapT=THREE.RepeatWrapping;t.flipY=false;texCache[u]=t;}
+  return texCache[u];
+}
+let matOverridesOn=false;
+function applyMaterialOverrides(root){
+  const hit=[];
+  root.traverse(o=>{
+    if(!o.isMesh) return;
+    o.castShadow=true;
+    o.userData._origMat=Array.isArray(o.material)?o.material.map(m=>m.clone()):(o.material?o.material.clone():o.material);
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    const nx=ms.map(m=>{
+      const sp=MATERIAL_OVERRIDES[m.name]; if(!sp) return m;
+      const p={name:m.name,side:m.side,transparent:!!sp.transmission};
+      for(const [k,v] of Object.entries(sp)){
+        if(k==='bumpMap') p.bumpMap=getTex(v);
+        else if(k==='normalMap') p.normalMap=getTex(v);
+        else p[k]=v;
+      }
+      hit.push(m.name);
+      return new THREE.MeshPhysicalMaterial(p);
+    });
+    o.userData._overrideMat=Array.isArray(o.material)?nx:nx[0];
+    if(!matOverridesOn) o.material=o.userData._origMat;
+    else o.material=o.userData._overrideMat;
+  });
+  return hit;
+}
+function toggleMaterialOverrides(on){
+  matOverridesOn=on;
+  for(const k in loaded){
+    const root=loaded[k]; if(!root) continue;
+    root.traverse(o=>{
+      if(!o.isMesh) return;
+      if(on&&o.userData._overrideMat) o.material=o.userData._overrideMat;
+      else if(!on&&o.userData._origMat) o.material=o.userData._origMat;
+    });
+  }
+}
+
+/* ---- loaders: KTX2 + meshopt for the packed flower assets ---- */
+const ktx2=new KTX2Loader().setTranscoderPath('/miss_dior_mobile_split/vendor/jsm/libs/basis/').detectSupport(renderer);
+const gltfLoader=new GLTFLoader().setKTX2Loader(ktx2).setMeshoptDecoder(MeshoptDecoder);
+
+const stats={}, progress={}, loaded={};
+const t0=performance.now();
+function renderStats(){
+  const rows=Object.keys(stats).sort().map(k=>{
+    const s=stats[k];
+    return `${k.padEnd(12)} ${(s.bytes/1e6).toFixed(2).padStart(7)}MB ${String(s.tris).padStart(8)}t ${(s.ms/1000).toFixed(1).padStart(5)}s`;
+  });
+  if(stats.bottle){
+    loaderEl.classList.add('hidden');
+  }
+  statsEl.textContent=rows.join('\n');
+}
+function countTris(root){
+  let n=0; root.traverse(o=>{
+    if(!o.isMesh&&!o.isInstancedMesh) return;
+    const g=o.geometry; if(!g) return;
+    const per=g.index?g.index.count/3:(g.attributes.position?g.attributes.position.count/3:0);
+    n+=per*(o.isInstancedMesh?o.count:1);
+  });
+  return Math.round(n);
+}
+
+/* ---- the three carved parts, loaded as-is ----
+   The instanced flower rebuild is parked in index.html.instanced-backup;
+   flowers.glb is the baked 320 MB original and is what renders here. */
+let mixer=null, action=null;
+const clock=new THREE.Clock();
+
+for(const part of [{key:'bottle',url:'https://media.githubusercontent.com/media/lakmalmabm/met-ads/main/miss_dior_mobile_split/parts/bottle.glb'}]){
+  const t=performance.now();
+  gltfLoader.load(part.url,g=>{
+    applyMaterialOverrides(g.scene);
+    g.scene.name=part.key; scene.add(g.scene); loaded[part.key]=g.scene;
+    if(g.animations.length){
+      mixer=new THREE.AnimationMixer(g.scene);
+      action=mixer.clipAction(g.animations[0]);
+      action.setLoop(THREE.LoopRepeat,Infinity);
+      action.play();
+    }
+    stats[part.key]={bytes:(progress[part.key]||{}).total||0,tris:countTris(g.scene),ms:performance.now()-t};
+    renderStats();
+  },ev=>{progress[part.key]={loaded:ev.loaded,total:ev.total};updateLoaderText();},
+    e=>{console.error('[ad]',part.key,'failed',e);loaderText.textContent=part.key+' failed';});
+}
+
+function updateLoaderText(){
+  const pend=['bottle'].filter(k=>!stats[k]).map(k=>{
+    const pr=progress[k]; if(!pr) return null;
+    return `${k} ${(pr.loaded/1048576).toFixed(0)}/${pr.total?(pr.total/1048576).toFixed(0):'?'}MB`;
+  }).filter(Boolean);
+  loaderText.textContent = pend.length ? pend.join('   ') : 'ready';
+  const tot=['bottle'].reduce((a,k)=>{
+    const pr=progress[k]; return {l:a.l+(pr?pr.loaded:0), t:a.t+(pr&&pr.total?pr.total:0)};
+  },{l:0,t:0});
+  if(tot.t) bar.style.width=(tot.l/tot.t*100).toFixed(1)+'%';
 }
 
 /* ---- sizing: identical frustum rule ---- */
@@ -992,25 +1048,26 @@ function resize(){
 resize(); window.addEventListener('resize',resize);
 if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
 
-let first=true;
 function tick(){
   requestAnimationFrame(tick);
   const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
   currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
   applyModelTilt(currentU,currentV);
+
+  const baseX=+document.getElementById('lx').value;
+  const baseY=+document.getElementById('ly').value;
+  shadowLight.position.x=baseX+currentU*2;
+  shadowLight.position.y=baseY+currentV*2;
+
+  if(mixer) mixer.update(clock.getDelta());
   renderer.render(scene,camera);
-  if(first){first=false;requestAnimationFrame(()=>{
-    loadedAt=performance.now();
-    loaderEl.classList.add('hidden');
-    statsEl.textContent='Loaded in '+(loadedAt/1000).toFixed(1)+' s';
-    statsEl.style.display='block';
-  });}
 }
 requestAnimationFrame(tick);
 
 window.__ad={
-  THREE,scene,camera,renderer,rig,bottle,tiltRoot,
-  get loadSeconds(){return loadedAt===null?null:+(loadedAt/1000).toFixed(2);},
+  THREE,scene,camera,renderer,rig,loaded,stats,
+  get mixer(){return mixer;}, get action(){return action;},
+  hFovDeg:THREE.MathUtils.radToDeg(H_FOV_RAD),
   setExposure(v){renderer.toneMappingExposure=v;return v;},
   setEnv(v){scene.environmentIntensity=v;return v;},
   setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
@@ -1019,11 +1076,37 @@ window.__ad={
   recenter(){neutralBeta=null;neutralGamma=null;targetU=0;targetV=0;return 'reset';},
   tilt(){return {yawDeg:+(currentU*MAX_YAW_DEG).toFixed(3),pitchDeg:+(currentV*MAX_PITCH_DEG).toFixed(3),
                  source:gyroActive?'gyro':(pointerActive?'pointer':'none')};},
-  setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;return {MAX_YAW_DEG,MAX_PITCH_DEG};},
+  setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;
+                    return {MAX_YAW_DEG,MAX_PITCH_DEG};},
   setInputRange(d){INPUT_RANGE_DEG=d;return d;},
+  toggle(k){const o=loaded[k];if(!o)return 'not loaded';o.visible=!o.visible;return k+' '+(o.visible?'on':'off');},
+  only(k){for(const n in loaded) loaded[n].visible=(n===k);return 'showing '+k;},
+  all(){for(const n in loaded) loaded[n].visible=true;return 'all on';},
   showStats(on=true){statsEl.style.display=on?'block':'none';return on;},
-  mat(name,props){let n=0;scene.traverse(o=>{if(o.isMesh&&o.material.name===name){Object.assign(o.material,props);o.material.needsUpdate=true;n++;}});return n;},
-  mats(){const s=new Set();scene.traverse(o=>{if(o.isMesh)s.add(o.material.name);});return [...s].sort();},
+  play(){if(action)action.paused=false;return 'playing';},
+  pause(){if(action)action.paused=true;return 'paused';},
+  scrub(t){
+    if(!action) return 'no clip';
+    action.paused=true; action.time=t%action.getClip().duration; mixer.update(0);
+    return 'frame '+Math.round(t*30);
+  },
+  mat(name,props){let n=0;scene.traverse(o=>{if(o.isMesh||o.isInstancedMesh){
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms) if(m&&m.name===name){Object.assign(m,props);m.needsUpdate=true;n++;}}});return n;},
+  mats(){const s=new Set();scene.traverse(o=>{if(o.isMesh||o.isInstancedMesh){
+    const ms=Array.isArray(o.material)?o.material:[o.material];
+    for(const m of ms) if(m) s.add(m.name);}});return [...s].sort();},
+  ab(frame=392,opacity=0.5){
+    this.motion(false);
+    let img=document.getElementById('__ref');
+    if(!img){img=document.createElement('img');img.id='__ref';
+      img.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;'+
+        'transform:scale(1.08);z-index:11;pointer-events:none;';
+      ad.appendChild(img);}
+    img.src='/miss_dior_mobile_split/ref/frame_'+frame+'.png'; img.style.opacity=opacity;
+    return this.scrub(frame/30);
+  },
+  abOff(){const i=document.getElementById('__ref');if(i)i.remove();this.motion(true);return this.play();}
 };
 </script>
 </body>
