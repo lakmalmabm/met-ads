@@ -762,9 +762,8 @@ window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loade
   loaderText.textContent='load failed: '+m;});
 function loaderTick(){
   if(loadedAt!==null) return;
-  const s=(performance.now()/1000).toFixed(1)+' s';
   const pct=heads===ASSETS.length&&total?Math.min(99,Math.round(got/total*100)):0;
-  loaderText.textContent=phase==='download'?`loading ${pct}%  ·  ${s}`:`preparing 3D  ·  ${s}`;
+  loaderText.textContent=phase==='download'?`loading ${pct}%`:'preparing 3D';
   bar.style.width=(phase==='download'?pct:100)+'%';
   requestAnimationFrame(loaderTick);
 }
@@ -1027,15 +1026,12 @@ function tick(){
   currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
   applyModelTilt(currentU,currentV);
   renderer.render(scene,camera);
-  if(first){first=false;requestAnimationFrame(()=>{
-    loadedAt=performance.now();
-    loaderEl.classList.add('hidden');
-    statsEl.style.display='block';
-  });}
+  if(first){first=false;requestAnimationFrame(()=>{loadedAt=performance.now();loaderEl.classList.add('hidden');});}
+  /* Load time and fps are no longer drawn over the ad; read them from the
+     console with __ad.loadSeconds and __ad.fps when measuring. */
   if(loadedAt!==null&&loadedAt>0){
     fpsN++; const now=performance.now();
-    if(now-fpsT>=500){ fps=fpsN*1000/(now-fpsT); fpsN=0; fpsT=now;
-      statsEl.textContent='Loaded in '+(loadedAt/1000).toFixed(1)+' s   ·   '+fps.toFixed(0)+' fps'; }
+    if(now-fpsT>=500){ fps=fpsN*1000/(now-fpsT); fpsN=0; fpsT=now; }
   }
 }
 requestAnimationFrame(tick);
@@ -1043,6 +1039,7 @@ requestAnimationFrame(tick);
 window.__ad={
   THREE,scene,camera,renderer,rig,bottle,tiltRoot,
   get loadSeconds(){return loadedAt===null?null:+(loadedAt/1000).toFixed(2);},
+  get fps(){return +fps.toFixed(1);},
   setExposure(v){renderer.toneMappingExposure=v;return v;},
   setEnv(v){scene.environmentIntensity=v;return v;},
   setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
@@ -1053,7 +1050,6 @@ window.__ad={
                  source:gyroActive?'gyro':(pointerActive?'pointer':'none')};},
   setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;return {MAX_YAW_DEG,MAX_PITCH_DEG};},
   setInputRange(d){INPUT_RANGE_DEG=d;return d;},
-  showStats(on=true){statsEl.style.display=on?'block':'none';return on;},
   mat(name,props){let n=0;scene.traverse(o=>{if(o.isMesh&&o.material.name===name){Object.assign(o.material,props);o.material.needsUpdate=true;n++;}});return n;},
   mats(){const s=new Set();scene.traverse(o=>{if(o.isMesh)s.add(o.material.name);});return [...s].sort();},
 };
