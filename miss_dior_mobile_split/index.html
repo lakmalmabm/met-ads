@@ -754,7 +754,7 @@ else {prompt.classList.add('hidden');}
 /* ===================================================================
    LOADING - byte progress + wall clock from navigation start
    =================================================================== */
-const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','bottle.glb','tex/houndstooth.png','tex/label.png','tex/ribbon_normal.jpg'];
+const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr',(new URLSearchParams(location.search).get('model')==='hi'?'bottle_hi.glb':'bottle.glb'),'tex/houndstooth.png','tex/label.png','tex/ribbon_normal.jpg'];
 let total=0,got=0,heads=0,phase='download',loadedAt=null;
 /* Any failed load (bad asset, decoder, shader) must show on screen, not leave the timer running. */
 window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loadedAt=-1;
@@ -920,7 +920,7 @@ const texP=Promise.all([
 
 /* ---- bottle: decode in parallel with the textures ---- */
 const draco=new DRACOLoader().setDecoderPath('/miss_dior_mobile_split/vendor/jsm/libs/draco/gltf/');
-const gltfP=blobURL('bottle.glb').then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
+const gltfP=blobURL((QS.get('model')==='hi'?'bottle_hi.glb':'bottle.glb')).then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
 const [[[patColor,patRough,houndBump],[labelTex],ribN],gltf]=await Promise.all([texP,gltfP,envP]);
 ribN.colorSpace=THREE.NoColorSpace;ribN.flipY=false;ribN.wrapS=ribN.wrapT=THREE.RepeatWrapping;ribN.repeat.set(4.56,4.56*Math.cos(0.281));ribN.anisotropy=8;
 
