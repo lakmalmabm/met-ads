@@ -754,7 +754,7 @@ else {prompt.classList.add('hidden');}
 /* ===================================================================
    LOADING - byte progress + wall clock from navigation start
    =================================================================== */
-const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr',(new URLSearchParams(location.search).get('model')==='hi'?'bottle_hi.glb':'bottle.glb'),'tex/houndstooth.png','tex/label.png','tex/ribbon_normal.jpg'];
+const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png',(new URLSearchParams(location.search).get('model')==='hi'?'bottle_hi.glb':'bottle.glb'),'tex/ribbon_normal.jpg'];
 let total=0,got=0,heads=0,phase='download',loadedAt=null;
 /* Any failed load (bad asset, decoder, shader) must show on screen, not leave the timer running. */
 window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loadedAt=-1;
@@ -819,8 +819,12 @@ const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerP
    ?px=3&tr=1 restores the previous behaviour, ?lights=6 all six lights. */
 const QS=new URLSearchParams(location.search);
 const isPhone='ontouchstart' in window||navigator.maxTouchPoints>0;
-const PX=+QS.get('px')||(isPhone?1.5:2);   /* iPhone reports 3; 1.5 is the measured sweet spot for an ad-sized canvas */
-const TR=+QS.get('tr')||0.5;
+const PX=+QS.get('px')||2;   /* 1.5 visibly softened everything behind the glass, the label included */
+/* The label sits BEHIND the bottle's front glass, so it is drawn through the
+   transmission pass. Rendering that pass at half resolution halves the label's
+   sharpness - that is what the client saw. Full resolution here; ?tr=0.5 and
+   ?px=1.5 restore the faster, softer version for fps comparison. */
+const TR=+QS.get('tr')||1;
 const KEEP_LIGHTS=QS.has('lights')?+QS.get('lights'):6;
 const SIDES=QS.get('sides')||'auto';   /* 'all' forces DoubleSide everywhere, for comparison */
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,PX));
@@ -897,32 +901,19 @@ function maskFor(objName){   /* Area.002 lights only the body, Area.004 only one
     if(exc.includes(objName))return 0;if(inc.length&&!inc.includes(objName))return 0;return 1;});
 }
 
-/* ---- textures, pre-processed exactly as the node trees use them ---- */
-const srgb2lin=c=>c<=0.04045?c/12.92:((c+0.055)/1.055)**2.4;
-const lum=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
-async function procTex(u,fns){
-  const img=await loadImg(u);const cv=document.createElement('canvas');cv.width=img.width;cv.height=img.height;
-  const g=cv.getContext('2d');g.drawImage(img,0,0);const src=g.getImageData(0,0,cv.width,cv.height).data;
-  return fns.map(fn=>{const out=new ImageData(cv.width,cv.height),o=out.data;
-    for(let i=0;i<src.length;i+=4){const c=fn(srgb2lin(src[i]/255),srgb2lin(src[i+1]/255),srgb2lin(src[i+2]/255));o[i]=c[0]*255;o[i+1]=c[1]*255;o[i+2]=c[2]*255;o[i+3]=255;}
-    const c2=document.createElement('canvas');c2.width=cv.width;c2.height=cv.height;c2.getContext('2d').putImageData(out,0,0);
-    const t=new THREE.CanvasTexture(c2);t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;});
-}
-const GA=1.4482,GB=[0.7531*0.97,0.8582*0.97,0.9999*0.97];   /* the two glasses of 'with pattern.002' */
-const texP=Promise.all([
-  procTex('tex/houndstooth.png',[
-    (r,g,b)=>{const f=lum(r,g,b);return [0,1,2].map(k=>(GB[k]*(1-f)+GA*f)/GA);},
-    (r,g,b)=>{const f=lum(r,g,b);return [0,0.1722*f,0];},
-    (r,g,b)=>{const f=lum(r,g,b);return [f,f,f];}]),
-  procTex('tex/label.png',[(r,g,b)=>{const t=Math.min(1,Math.max(0,(lum(r,g,b)-0.2864)/(1-0.2864)));return [t,t,t];}]),
-  blobURL('tex/ribbon_normal.jpg').then(u=>new THREE.TextureLoader().loadAsync(u)),
-]);
+/* ---- textures: baked in Blender (live/tex/*), so nothing is computed here.
+   The houndstooth maps and the label curve used to be built pixel by pixel in
+   JavaScript on every load, which cost seconds on a phone. ---- */
+const rawTex=async u=>{const t=await new THREE.TextureLoader().loadAsync(await blobURL(u));
+  t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;};
+const GA=1.4482;
+const texP=Promise.all(['tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png','tex/ribbon_normal.jpg'].map(rawTex));
 
 /* ---- bottle: decode in parallel with the textures ---- */
 const draco=new DRACOLoader().setDecoderPath('/miss_dior_mobile_split/vendor/jsm/libs/draco/gltf/');
 const gltfP=blobURL((QS.get('model')==='hi'?'bottle_hi.glb':'bottle.glb')).then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
-const [[[patColor,patRough,houndBump],[labelTex],ribN],gltf]=await Promise.all([texP,gltfP,envP]);
-ribN.colorSpace=THREE.NoColorSpace;ribN.flipY=false;ribN.wrapS=ribN.wrapT=THREE.RepeatWrapping;ribN.repeat.set(4.56,4.56*Math.cos(0.281));ribN.anisotropy=8;
+const [[patColor,patRough,houndBump,labelTex,ribN],gltf]=await Promise.all([texP,gltfP,envP]);
+ribN.repeat.set(4.56,4.56*Math.cos(0.281));
 
 /* ---- materials, rebuilt from the Blender node trees (values are linear) ---- */
 const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
@@ -975,7 +966,8 @@ function makeMat(mname,objName){
     const lfb=THREE.ShaderChunk.lights_fragment_begin.replace('rectAreaLight = rectAreaLights[ i ];','rectAreaLight = rectAreaLights[ i ]; rectAreaLight.color *= LLMASK[ i ];');
     if(lfb===THREE.ShaderChunk.lights_fragment_begin) console.warn('[ad] light-link hook failed');
     f=f.replace('#include <lights_fragment_begin>',lfb);
-    f=`const float LLMASK[${mask.length}] = float[${mask.length}](${mask.map(f1).join(',')});\n`+f;
+    f=`uniform float LLMASK[${mask.length}];\n`+f;
+    sh.uniforms.LLMASK={value:mask};
     if(patch){
       f=f.replace('void main() {',patch.head+'\nvoid main() {');
       if(patch.color) f=f.replace('#include <color_fragment>','#include <color_fragment>\n'+patch.color);
@@ -984,7 +976,7 @@ function makeMat(mname,objName){
     }
     sh.fragmentShader=f;
   };
-  m.customProgramCacheKey=()=>mname+'|'+mask.join('');
+  m.customProgramCacheKey=()=>mname;   /* the mask is a uniform now, so parts can share a program */
   return m;
 }
 
@@ -1019,6 +1011,9 @@ function resize(){
 resize(); window.addEventListener('resize',resize);
 if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
 
+/* Compile every shader in parallel before the first frame instead of letting
+   the first render block the main thread on each one in turn. */
+if(renderer.compileAsync){ try{ await renderer.compileAsync(scene,camera); }catch(e){ console.warn('[ad] compileAsync',e); } }
 let first=true,fps=0,fpsN=0,fpsT=performance.now();
 function tick(){
   requestAnimationFrame(tick);
