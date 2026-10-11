@@ -1,0 +1,1058 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Miss Dior — Mobile Interscroller</title>
+<link rel="icon" href="data:," />
+
+<style>
+  /* ---------------------------------------------------------------
+     DIMENSIONS — from spec
+       page width   768px
+       top section   768 × 1824  (24px L/R padding)
+       video         768 × 1152
+       bottom        768 × 1824  (24px L/R padding)
+     --------------------------------------------------------------- */
+  :root {
+    --page-w:    768px;
+    --section-h: 1824px;
+    --video-h:   1152px;
+    --video-w:   768px;
+    --pad-x:     24px;
+    --sk:        #e5e5e5;
+    --gap:       12px;
+    --r:         4px;
+  }
+
+  @media (max-width: 768px) {
+    :root {
+      --page-w:    448px;
+      --section-h: 1824px;
+      --video-h:   669px;
+      --video-w:   430px;
+      --pad-x:     24px;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html {
+    scroll-behavior: auto;
+    overscroll-behavior: none;
+  }
+
+  body {
+    margin: 0;
+    background: #f5f5f5;
+    font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+
+  .page {
+    position: relative;
+    width: var(--page-w);
+    max-width: 100%;
+    margin: 0 auto;
+    background: #fff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05),
+                0 20px 50px rgba(0, 0, 0, 0.08);
+    /* no overflow:hidden — it breaks position:sticky on the video */
+  }
+
+  /* ---------------------------------------------------------------
+     PUBLISHER MOCK — skeleton content. z-index 20 so it slides
+     OVER the sticky video beneath it.
+     --------------------------------------------------------------- */
+  .mock {
+    position: relative;
+    z-index: 20;
+    background: #fff;
+    min-height: var(--section-h);
+    padding: 40px var(--pad-x);
+  }
+  .mock--bottom { margin-bottom: 75px; }
+
+  /* Shared skeleton bar */
+  .s { border-radius: var(--r); background: var(--sk); }
+
+  /* ---- Pattern A: text lines (5-col grid) -------------------- */
+  .pa {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pa .s { height: 12px; }
+  .pa .s--full { grid-column: span 5; }
+  .pa .s--short { grid-column: span 2; }
+  .pa .s--3 { grid-column: span 3; }
+  .pa .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern B: media block (5-col grid) ------------------- */
+  .pb {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+  .pb .s { height: 12px; }
+  .pb .s--img { grid-column: span 3; grid-row: span 2; height: auto; min-height: 64px; }
+  .pb .s--thumb { grid-column: span 1; height: 64px; }
+  .pb .s--3 { grid-column: span 3; }
+  .pb .s--2 { grid-column: span 2; }
+  .pb .s--1 { grid-column: span 1; }
+
+  /* ---- Pattern C: article row (5-col, split 3+2) ------------- */
+  .pc {
+    display: grid;
+    grid-template-columns: 3fr 2fr;
+    gap: var(--gap);
+    margin-bottom: 16px;
+  }
+
+  /* Left: thumbnail + text lines */
+  .pc__left {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__left .s--pic { grid-row: span 6; min-height: 72px; }
+  .pc__left .s { height: 12px; }
+
+  /* Right: two mini-cards stacked */
+  .pc__right {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap);
+  }
+
+  .pc__card {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap);
+    align-content: start;
+  }
+  .pc__card .s--pic { grid-column: span 1; grid-row: span 3; min-height: 48px; }
+  .pc__card .s { height: 12px; }
+  .pc__card .s--w1 { grid-column: span 1; }
+
+  /* ---------------------------------------------------------------
+     STICKY VIDEO — z-index 10, revealed as mock scrolls past.
+     --------------------------------------------------------------- */
+  .ad {
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    width: var(--video-w);
+    height: var(--video-h);
+    margin: 0 auto;
+    /* Was #000. The Blender backdrop is a light grey gradient (sampled
+       #dadddf -> #abadae down the frame), so grey fails far less visibly
+       than black during load. */
+    background: #d5d6d8;
+    overflow: hidden;
+  }
+
+  /* The canvas replaces the <video> at IDENTICAL geometry. It fills .ad
+     exactly, so there is no object-fit: the crop that object-fit:cover used
+     to perform is now done by the camera's FOV (see CAM in the script).
+     scale(1.08) is kept verbatim - it is what gives the gyro translate its
+     overscan, and it is part of the framing match. */
+  .ad canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    transform: scale(1.08);
+    will-change: transform;
+  }
+
+  /* Load readout. model.glb is ~357 MB unoptimised, so this is not optional. */
+  .ad__loader {
+    position: absolute;
+    inset: 0;
+    z-index: 12;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    background: #d5d6d8;
+    color: #555;
+    font-size: 13px;
+    letter-spacing: 0.02em;
+    transition: opacity 0.4s;
+  }
+  .ad__loader.hidden { opacity: 0; pointer-events: none; }
+  .ad__bar {
+    width: 140px;
+    height: 2px;
+    background: rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+  }
+  .ad__bar i {
+    display: block;
+    width: 0%;
+    height: 100%;
+    background: #c2185b;
+    transition: width 0.2s linear;
+  }
+
+  /* Per-part readout. Absolutely positioned INSIDE .ad so the div's fixed
+     768x1152 / 430x669 geometry is untouched. __ad.showStats(false) hides it. */
+  .ad__stats {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 13;
+    margin: 0;
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.72);
+    color: #333;
+    font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+    white-space: pre;
+    border-radius: 3px;
+    pointer-events: none;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+  }
+
+  /* iOS gyro permission prompt */
+  .gyro-prompt {
+    position: absolute;
+    bottom: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 15;
+    padding: 10px 20px;
+    background: rgba(255, 255, 255, 0.9);
+    color: #000;
+    font-size: 13px;
+    border-radius: 20px;
+    white-space: nowrap;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+    transition: opacity 0.3s;
+  }
+  .gyro-prompt.hidden { opacity: 0; pointer-events: none; }
+
+  .light-controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    z-index: 100;
+    background: rgba(255,255,255,0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    padding: 12px 14px;
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.12);
+    font: 12px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #333;
+    min-width: 220px;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+  .light-controls h4 {
+    margin: 8px 0 4px;
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .light-controls h4:first-child { margin-top: 0; }
+  .light-controls .copy-btn {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px;
+    background: #333;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font: inherit;
+    cursor: pointer;
+  }
+  .light-controls .copy-btn:active { background: #555; }
+  .light-controls label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+  .light-controls input[type=range] {
+    flex: 1;
+    max-width: 110px;
+  }
+  .light-controls span.val {
+    min-width: 36px;
+    text-align: right;
+  }
+
+  .ad__placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #666;
+    font-size: 14px;
+    text-align: center;
+    padding: var(--pad-x);
+  }
+</style>
+</head>
+
+<body>
+
+<div class="light-controls" id="lc" style="display:none">
+  <h4>Shadow light</h4>
+  <label>X <input type="range" id="lx" min="-4" max="8" step="0.1" value="6.4"><span class="val" id="lx-v">6.4</span></label>
+  <label>Y <input type="range" id="ly" min="-4" max="4" step="0.1" value="1.0"><span class="val" id="ly-v">1.0</span></label>
+  <label>Z <input type="range" id="lz" min="-2" max="6" step="0.1" value="4.6"><span class="val" id="lz-v">4.6</span></label>
+  <label>Bright <input type="range" id="lb" min="0" max="10" step="0.1" value="5"><span class="val" id="lb-v">5.0</span></label>
+  <label><input type="checkbox" id="t-shadow" checked> On</label>
+  <h4>Area lights</h4>
+  <div id="area-controls"></div>
+  <label><input type="checkbox" id="t-area" checked> All on</label>
+  <h4>Box</h4>
+  <label>Width <input type="range" id="bw" min="0.01" max="1.2" step="0.01" value="0.76"><span class="val" id="bw-v">0.76</span></label>
+  <label>Height <input type="range" id="bh" min="0.01" max="1.2" step="0.01" value="1.12"><span class="val" id="bh-v">1.12</span></label>
+  <label>Depth <input type="range" id="bd" min="0.1" max="20" step="0.1" value="1"><span class="val" id="bd-v">1.0</span></label>
+  <label><input type="checkbox" id="t-edges" checked> Show edges</label>
+  <h4>Materials</h4>
+  <label><input type="checkbox" id="t-matoverride"> Material overrides</label>
+  <h4>Camera</h4>
+  <label>Zoom <input type="range" id="cam-z" min="0.5" max="20" step="0.1" value="3.97"><span class="val" id="cam-z-v">3.97</span></label>
+  <h4>Environment</h4>
+  <label>HDRI <input type="range" id="hdri-int" min="0" max="3" step="0.05" value="1"><span class="val" id="hdri-v">1.0</span></label>
+  <label>Exposure <input type="range" id="exposure" min="0" max="3" step="0.05" value="0.35"><span class="val" id="exp-v">0.35</span></label>
+  <button class="copy-btn" id="copy-btn">Copy values</button>
+</div>
+
+<div class="page">
+
+  <!-- ============================================================
+       TOP SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial — fills remaining height) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================
+       STICKY VIDEO — 768 × 1152
+       ============================================================ -->
+  <div class="ad" id="ad">
+    <canvas id="stage"></canvas>
+    <pre class="ad__stats" id="stats"></pre>
+    <div class="ad__loader" id="loader">
+      <div class="ad__bar"><i id="bar"></i></div>
+      <div id="loader-text">loading scene</div>
+    </div>
+    <div class="gyro-prompt" id="gyro-prompt">Tap to enable motion</div>
+  </div>
+
+  <!-- ============================================================
+       BOTTOM SECTION — 768 × 1824
+       ============================================================ -->
+  <div class="mock mock--bottom">
+
+    <!-- --- Group 1 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 2 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 3 --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+    <!-- --- Group 4 (partial) --- -->
+    <div class="pa">
+      <div class="s s--full"></div>
+      <div class="s s--full"></div>
+      <div class="s s--short"></div>
+    </div>
+    <div class="pb">
+      <div class="s s--img"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--thumb"></div>
+      <div class="s s--3"></div>
+      <div class="s s--2"></div>
+      <div class="s s--3"></div>
+      <div class="s s--1"></div>
+      <div class="s s--2"></div>
+    </div>
+    <div class="pc">
+      <div class="pc__left">
+        <div class="s s--pic"></div>
+        <div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div><div class="s"></div>
+      </div>
+      <div class="pc__right">
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+        <div class="pc__card"><div class="s s--pic"></div><div class="s"></div><div class="s s--w1"></div><div class="s"></div></div>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /.page -->
+
+<!-- three.js r185, vendored under ./vendor. CLAUDE.md forbids runtime npm
+     dependencies and requires ads to be self-contained with relative paths,
+     so the library ships with the unit. The import map is what lets the
+     addon modules resolve their bare 'three' specifier without a bundler. -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/miss_dior_mobile_split/vendor/three.module.js",
+    "three/addons/": "/miss_dior_mobile_split/vendor/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+
+/* ===================================================================
+   LIVE BOTTLE (replaces the 357 MB model.glb build; previous version in
+   index.html.pre-live).
+   - Background: the Blender scene rendered in Cycles with the bottle made
+     invisible to camera/reflection/refraction (it still casts its shadow),
+     20% overscan. Drawn as a screen quad in scene-linear so the glass
+     refracts it correctly.
+   - Bottle: 2.9 MB Draco GLB, every part baked to world space (the body's
+     non-uniform scale made the parented bow export skewed). Materials are
+     rebuilt from the node trees - the exporter only sees grey because of
+     the Mx White group.
+   - Tone mapping: Blender Filmic + Medium High Contrast, sampled from
+     Blender itself into a LUT (live/filmic_lut.json), not ACES.
+   - Tilt: this file's model-tilt rig; the camera and background stay fixed.
+   =================================================================== */
+const ROOT='/miss_dior_mobile_split/live/';
+/* ---- motion input (see the main build for the full rationale) ---- */
+const EASE=0.3;
+let MAX_YAW_DEG=30, MAX_PITCH_DEG=30, INPUT_RANGE_DEG=45;
+const RECENTER=0.0016, INVERT_YAW=1, INVERT_PITCH=1;
+
+const canvas=document.getElementById('stage');
+const prompt=document.getElementById('gyro-prompt');
+const loaderEl=document.getElementById('loader');
+const loaderText=document.getElementById('loader-text');
+const bar=document.getElementById('bar');
+const ad=document.getElementById('ad');
+const statsEl=document.getElementById('stats');
+
+let targetU=0,targetV=0,currentU=0,currentV=0;
+let gyroActive=false,pointerActive=false,motionEnabled=true;
+let neutralBeta=null,neutralGamma=null;
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+function onOrientation(e){
+  if(e.beta===null&&e.gamma===null) return;
+  const beta=e.beta||0,gamma=e.gamma||0;
+  if(neutralBeta===null){neutralBeta=beta;neutralGamma=gamma;}
+  else{neutralBeta+=(beta-neutralBeta)*RECENTER;neutralGamma+=(gamma-neutralGamma)*RECENTER;}
+  const angle=(screen.orientation&&screen.orientation.angle)||window.orientation||0;
+  let du=gamma-neutralGamma,dv=beta-neutralBeta;
+  if(angle===90){const t=du;du=dv;dv=-t;}
+  else if(angle===-90||angle===270){const t=du;du=-dv;dv=t;}
+  targetU=clamp(du/INPUT_RANGE_DEG,-1,1)*INVERT_YAW;
+  targetV=clamp(dv/INPUT_RANGE_DEG,-1,1)*INVERT_PITCH;
+}
+function startGyro(){
+  window.addEventListener('deviceorientation',function probe(e){
+    if(e.beta===null&&e.gamma===null) return;
+    gyroActive=true;prompt.classList.add('hidden');
+    window.removeEventListener('deviceorientation',probe);
+    window.addEventListener('deviceorientation',onOrientation);
+  });
+}
+const isTouchDevice='ontouchstart' in window||navigator.maxTouchPoints>0;
+function onPointer(e){
+  if(gyroActive||isTouchDevice) return;
+  const r=ad.getBoundingClientRect(); if(!r.width||!r.height) return;
+  targetU=clamp(((e.clientX-r.left)/r.width-0.5)*2,-1,1)*INVERT_YAW;
+  targetV=clamp(((e.clientY-r.top)/r.height-0.5)*2,-1,1)*INVERT_PITCH;
+  pointerActive=true;
+}
+window.addEventListener('pointermove',onPointer,{passive:true});
+window.addEventListener('pointerleave',()=>{if(!gyroActive){targetU=0;targetV=0;}},{passive:true});
+/* desktop Chrome also exposes requestPermission, so gate on touch or the prompt shows on laptops */
+const needsPermission=isTouchDevice&&typeof DeviceOrientationEvent!=='undefined'&&typeof DeviceOrientationEvent.requestPermission==='function';
+if(needsPermission){
+  prompt.addEventListener('click',()=>{DeviceOrientationEvent.requestPermission()
+    .then(s=>{if(s==='granted')startGyro();else prompt.classList.add('hidden');})
+    .catch(()=>prompt.classList.add('hidden'));});
+} else if('DeviceOrientationEvent' in window){prompt.classList.add('hidden');startGyro();}
+else {prompt.classList.add('hidden');}
+
+
+/* ===================================================================
+   LOADING - byte progress + wall clock from navigation start
+   =================================================================== */
+const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png',(new URLSearchParams(location.search).get('model')==='hi'?'bottle_hi.glb':'bottle.glb'),'tex/ribbon_normal.jpg'];
+let total=0,got=0,heads=0,phase='download',loadedAt=null;
+/* Any failed load (bad asset, decoder, shader) must show on screen, not leave the timer running. */
+window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loadedAt=-1;
+  const m=(e.reason&&e.reason.message)||String(e.reason);console.error('[ad] load failed',e.reason);
+  loaderText.textContent='load failed: '+m;});
+function loaderTick(){
+  if(loadedAt!==null) return;
+  const pct=heads===ASSETS.length&&total?Math.min(99,Math.round(got/total*100)):0;
+  loaderText.textContent=phase==='download'?`loading ${pct}%`:'preparing 3D';
+  bar.style.width=(phase==='download'?pct:100)+'%';
+  requestAnimationFrame(loaderTick);
+}
+loaderTick();
+async function fetchP(u){
+  const r=await fetch(ROOT+u); if(!r.ok) throw new Error(u+' '+r.status);
+  total+=+r.headers.get('content-length')||0; heads++;
+  const rd=r.body.getReader(),parts=[];
+  for(;;){const {done,value}=await rd.read(); if(done) break; parts.push(value); got+=value.length;}
+  return new Blob(parts);
+}
+const BLOB=Object.fromEntries(ASSETS.map(u=>[u,fetchP(u)]));
+Promise.all(Object.values(BLOB)).then(()=>{phase='prepare';}).catch(e=>{console.error('[ad]',e);loaderText.textContent='load failed: '+e.message;});
+const blobURL=async u=>URL.createObjectURL(await BLOB[u]);
+const getJSON=async u=>JSON.parse(await (await BLOB[u]).text());
+const loadImg=u=>blobURL(u).then(src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('bad image '+u));i.src=src;}));
+
+const [SC,LUT]=await Promise.all([getJSON('scene.json'),getJSON('filmic_lut.json')]);
+
+/* ---- Filmic + Medium High Contrast, as a CustomToneMapping ---- */
+const N=128,LO=-14,HI=8;
+function lutAt(x){const Li=LUT.lin,D=LUT.disp;if(x<=0)return 0;if(x>=Li[Li.length-1])return D[D.length-1];
+  let i=1;while(Li[i]<x)i++;return D[i-1]+(x-Li[i-1])/(Li[i]-Li[i-1])*(D[i]-D[i-1]);}
+const FWD=Array.from({length:N},(_,k)=>lutAt(2**(LO+(HI-LO)*k/(N-1))));
+const lutGLSL=name=>`const float ${name}[${N}] = float[${N}](${FWD.map(v=>v.toFixed(6)).join(',')});`;
+const f1=v=>v.toFixed(1);
+const beforeTM=THREE.ShaderChunk.tonemapping_pars_fragment;
+THREE.ShaderChunk.tonemapping_pars_fragment=beforeTM.replace(/vec3 CustomToneMapping\( vec3 color \) \{ return color; \}/,`
+${lutGLSL('FILMIC_LUT')}
+float filmicCh(float x){
+  if (x <= 0.0) return 0.0;
+  float l = (log2(x) - (${f1(LO)})) / ${f1(HI-LO)} * ${f1(N-1)};
+  if (l <= 0.0) return FILMIC_LUT[0] * x / exp2(${f1(LO)});
+  l = min(l, ${f1(N-1)});
+  int i = int(floor(l)); int j = min(i + 1, ${N-1});
+  return mix(FILMIC_LUT[i], FILMIC_LUT[j], l - float(i));
+}
+vec3 CustomToneMapping( vec3 color ) {
+  color *= toneMappingExposure;
+  vec3 d = vec3(filmicCh(color.r), filmicCh(color.g), filmicCh(color.b));
+  return mix(d / 12.92, pow((d + 0.055) / 1.055, vec3(2.4)), step(0.04045, d));
+}`);
+if(THREE.ShaderChunk.tonemapping_pars_fragment===beforeTM) console.warn('[ad] Filmic tone mapping hook failed');
+
+/* ===================================================================
+   SCENE
+   =================================================================== */
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:false,powerPreference:'high-performance'});
+/* ---- quality budget -------------------------------------------------
+   iPhones report devicePixelRatio 3, and the glass is drawn twice (the
+   transmission pass re-renders the scene behind it), so this ad is fill-rate
+   bound, not triangle bound. Both knobs are URL-overridable for measuring:
+   ?px=3&tr=1 restores the previous behaviour, ?lights=6 all six lights. */
+const QS=new URLSearchParams(location.search);
+const isPhone='ontouchstart' in window||navigator.maxTouchPoints>0;
+const PX=+QS.get('px')||2;   /* 1.5 visibly softened everything behind the glass, the label included */
+/* The label sits BEHIND the bottle's front glass, so it is drawn through the
+   transmission pass. Rendering that pass at half resolution halves the label's
+   sharpness - that is what the client saw. Full resolution here; ?tr=0.5 and
+   ?px=1.5 restore the faster, softer version for fps comparison. */
+const TR=+QS.get('tr')||1;
+const KEEP_LIGHTS=QS.has('lights')?+QS.get('lights'):6;
+const SIDES=QS.get('sides')||'auto';   /* 'all' forces DoubleSide everywhere, for comparison */
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,PX));
+if('transmissionResolutionScale' in renderer) renderer.transmissionResolutionScale=TR;
+renderer.outputColorSpace=THREE.SRGBColorSpace;
+renderer.toneMapping=THREE.CustomToneMapping;
+renderer.toneMappingExposure=1;
+const scene=new THREE.Scene();
+
+const B2T=new THREE.Matrix4().set(1,0,0,0, 0,0,1,0, 0,-1,0,0, 0,0,0,1);   /* Blender Z-up -> three Y-up */
+const b2t=mw=>B2T.clone().multiply(new THREE.Matrix4().set(...mw));
+/* Portrait render with sensor_fit AUTO: the 36 mm is the VERTICAL axis. Lock
+   the horizontal FOV to Blender's and derive vertical from .ad's aspect -
+   same frustum rule as before, so the framing match carries over. */
+const RES=SC.camera.res, TAN_W=(SC.camera.sensor/2)/SC.camera.lens*(RES[0]/RES[1]);
+const H_FOV_RAD=2*Math.atan(TAN_W);
+const camera=new THREE.PerspectiveCamera(50,1,0.1,100);
+{const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();b2t(SC.camera.mw).decompose(p,q,s);camera.position.copy(p);camera.quaternion.copy(q);}
+const PIVOT=new THREE.Vector3(0.0107,-0.0735,0.0466);   /* bottle centre: Blender (0.0107,-0.0466,-0.0735) */
+
+/* ---- background: Cycles frame, overscan 1.2, mapped by view ray ---- */
+const OS=1.2, TAN_H_OS=(SC.camera.sensor/2)/SC.camera.lens*OS, TAN_W_OS=TAN_H_OS*RES[0]/RES[1];
+const bgImg=await loadImg('bg.png');
+const bgTex=new THREE.Texture(bgImg);bgTex.colorSpace=THREE.NoColorSpace;bgTex.generateMipmaps=false;bgTex.minFilter=THREE.LinearFilter;bgTex.needsUpdate=true;
+const bgMat=new THREE.ShaderMaterial({
+  uniforms:{tBg:{value:bgTex},uInvProj:{value:camera.projectionMatrixInverse},uTan:{value:new THREE.Vector2(TAN_W_OS,TAN_H_OS)}},
+  vertexShader:'varying vec2 vNdc; void main(){ vNdc = position.xy; gl_Position = vec4(position.xy, 0.9999, 1.0); }',
+  fragmentShader:`
+uniform sampler2D tBg; uniform mat4 uInvProj; uniform vec2 uTan; varying vec2 vNdc;
+${lutGLSL('BG_LUT')}
+/* The PNG is Filmic display values; undo the curve so the glass refracts
+   scene-linear light, and the final pass re-applies it (round trip is exact). */
+float invFilmic(float d){
+  if (d <= BG_LUT[0]) return d / max(BG_LUT[0], 1e-6) * exp2(${f1(LO)});
+  int lo = 0, hi = ${N-1};
+  for (int k = 0; k < 8; k++) { int m = (lo + hi) / 2; if (BG_LUT[m] <= d) lo = m; else hi = m; }
+  float a = BG_LUT[lo], b = BG_LUT[hi]; float t = b > a ? clamp((d - a) / (b - a), 0.0, 1.0) : 0.0;
+  return exp2(${f1(LO)} + (float(lo) + t * float(hi - lo)) / ${f1(N-1)} * ${f1(HI-LO)});
+}
+void main(){
+  vec4 v = uInvProj * vec4(vNdc, 0.0, 1.0); v.xyz /= v.w;
+  vec2 uv = 0.5 + 0.5 * (v.xy / -v.z) / uTan;
+  vec3 d = texture(tBg, uv).rgb;
+  gl_FragColor = vec4(invFilmic(d.r), invFilmic(d.g), invFilmic(d.b), 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,depthTest:false,depthWrite:false});
+const bg=new THREE.Mesh(new THREE.PlaneGeometry(2,2),bgMat);bg.frustumCulled=false;bg.renderOrder=-1000;scene.add(bg);
+
+/* ---- environment: studio HDRI with the world's 0.5 strength baked in ---- */
+const envP=blobURL('env.hdr').then(u=>new RGBELoader().loadAsync(u)).then(t=>{
+  t.mapping=THREE.EquirectangularReflectionMapping;scene.environment=t;
+  scene.environmentRotation=new THREE.Euler(0,THREE.MathUtils.degToRad(163.2),0);   /* Blender Mapping Z 16.8 deg, +180 for three's equirect seam */
+});
+
+/* ---- lights: Blender area lights, radiance P/(A*pi), with light linking ---- */
+RectAreaLightUniformsLib.init();
+const rig=[];
+/* Measured contribution order; see the notes in the commit. Trimming the tail
+   removes them from the shader entirely, which is where the saving is. */
+const LIGHT_PRIORITY=['Area','Area.003','Area.001','Area.004','Area.002','Area.005'];
+const KEPT=new Set(LIGHT_PRIORITY.slice(0,Math.max(1,KEEP_LIGHTS)));
+for(const Lt of SC.lights){
+  if(!KEPT.has(Lt.name)) continue;
+  const p=new THREE.Vector3(),q=new THREE.Quaternion(),s=new THREE.Vector3();b2t(Lt.mw).decompose(p,q,s);
+  const w=Lt.size[0]*s.x,h=Lt.size[1]*s.y;
+  const l=new THREE.RectAreaLight(new THREE.Color(...Lt.color),Lt.power/(Math.PI*w*h),w,h);
+  l.position.copy(p);l.quaternion.copy(q);l.name=Lt.name;l.userData.baseIntensity=l.intensity;rig.push(l);scene.add(l);
+}
+const san=n=>THREE.PropertyBinding.sanitizeNodeName(n);
+function maskFor(objName){   /* Area.002 lights only the body, Area.004 only one bow piece */
+  return SC.lights.filter(Lt=>KEPT.has(Lt.name)).map(Lt=>{const lst=SC.linking[Lt.name]||[];if(!lst.length)return 1;
+    const inc=lst.filter(e=>e[1]==='INCLUDE').map(e=>san(e[0])),exc=lst.filter(e=>e[1]==='EXCLUDE').map(e=>san(e[0]));
+    if(exc.includes(objName))return 0;if(inc.length&&!inc.includes(objName))return 0;return 1;});
+}
+
+/* ---- textures: baked in Blender (live/tex/*), so nothing is computed here.
+   The houndstooth maps and the label curve used to be built pixel by pixel in
+   JavaScript on every load, which cost seconds on a phone. ---- */
+const rawTex=async u=>{const t=await new THREE.TextureLoader().loadAsync(await blobURL(u));
+  t.colorSpace=THREE.NoColorSpace;t.flipY=false;t.wrapS=t.wrapT=THREE.RepeatWrapping;t.anisotropy=8;return t;};
+const GA=1.4482;
+const texP=Promise.all(['tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png','tex/ribbon_normal.jpg'].map(rawTex));
+
+/* ---- bottle: decode in parallel with the textures ---- */
+const draco=new DRACOLoader().setDecoderPath('/miss_dior_mobile_split/vendor/jsm/libs/draco/gltf/');
+const gltfP=blobURL((QS.get('model')==='hi'?'bottle_hi.glb':'bottle.glb')).then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
+const [[patColor,patRough,houndBump,labelTex,ribN],gltf]=await Promise.all([texP,gltfP,envP]);
+ribN.repeat.set(4.56,4.56*Math.cos(0.281));
+
+/* ---- materials, rebuilt from the Blender node trees (values are linear) ---- */
+const lin=(r,g,b)=>new THREE.Color().setRGB(r,g,b,THREE.LinearSRGBColorSpace);
+const BUMP=`
+vec3 bumpN(vec3 N, float h, float strength){
+  vec3 dpx = dFdx(-vViewPosition), dpy = dFdy(-vViewPosition);
+  float dhx = dFdx(h), dhy = dFdy(h);
+  vec3 r1 = cross(dpy, N), r2 = cross(N, dpx); float det = dot(dpx, r1);
+  vec3 g = sign(det) * (dhx * r1 + dhy * r2);
+  return normalize(mix(N, normalize(abs(det) * N - g), strength));
+}
+float aaWave(float ph){ float fw = fwidth(ph); float amp = clamp(1.0 - fw / 3.14159, 0.0, 1.0); return 0.5 + 0.5 * amp * sin(ph - 1.5708); }`;
+const PATCH={
+  RIBBONZ:{head:BUMP,color:`float wv = aaWave(1000.0 * (vUv.x * 0.66913 - (1.0 - vUv.y) * 0.74314));`,
+    rough:`roughnessFactor = mix(0.2021, 1.0, clamp((wv - 0.1955) / 0.3, 0.0, 1.0));`,normal:`normal = bumpN(normal, wv, 0.2);`},
+  'Material.029':{head:BUMP,color:`float wv = aaWave(280.0 * vUv.x + 16000.0); diffuseColor.rgb = vec3(mix(0.02, 0.0, clamp(wv / 0.5045, 0.0, 1.0)));`,
+    rough:`roughnessFactor = mix(0.5651, 0.1666, clamp(wv / 0.5091, 0.0, 1.0));`,normal:`normal = bumpN(normal, wv, 0.45);`},
+  'Material.021':{head:'',color:`{ vec2 q = vUv * 220.0; q = vec2(q.x + q.y, q.y - q.x) * 0.70711; float f1 = length(fract(q) - 0.5);
+      float fade = clamp(1.0 - fwidth(q.x) * 1.5, 0.0, 1.0); diffuseColor.rgb *= 0.5 + 0.5 * mix(0.3826, f1, fade); }`},
+};
+function makeMat(mname,objName){
+  let m;
+  switch(mname){
+    case 'glass.004':m=new THREE.MeshPhysicalMaterial({color:lin(1.8087,1.8087,1.8087),specularColor:lin(1.8087,1.8087,1.8087),roughness:0,metalness:0,transmission:1,ior:1.45,thickness:0.25});break;
+    case 'with pattern.002':m=new THREE.MeshPhysicalMaterial({color:lin(GA,GA,GA),map:patColor,specularColor:lin(GA,GA,GA),specularColorMap:patColor,
+      roughness:1,roughnessMap:patRough,metalness:0,transmission:1,ior:1.45,thickness:0.25,bumpMap:houndBump,bumpScale:0.004});break;
+    case 'glass.005':m=new THREE.MeshPhysicalMaterial({color:lin(1,0.9041,0.9167),specularColor:lin(1,0.9041,0.9167),roughness:0,metalness:0,transmission:1,ior:2.06,thickness:0.3});break;
+    case 'Water 02.002':m=new THREE.MeshPhysicalMaterial({color:lin(1.1,0.0491,0.3198),specularColor:lin(1.05,0.5245,0.6599),roughness:0,metalness:0,transmission:1,ior:1.45,thickness:0.4,
+      emissive:lin(1.1,0.0491,0.3198),emissiveIntensity:0.01});break;
+    case 'Material.020':m=new THREE.MeshPhysicalMaterial({color:lin(0.8,0.8,0.8),metalness:1,roughness:0.1});break;
+    case 'Material.021':m=new THREE.MeshPhysicalMaterial({color:0xffffff,map:labelTex,metalness:0.6227,roughness:0.3964});
+      /* The label is 0.03 behind the front glass in the .blend, so the renderer
+         refracts it and it reads as sitting inside the bottle. Client wants it
+         as the outermost layer: draw it last, over the glass, at full res. */
+      m.depthTest=false; m.depthWrite=false; break;
+    case 'Ribbon.001':m=new THREE.MeshPhysicalMaterial({color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,normalMap:ribN,normalScale:new THREE.Vector2(0.74,0.74)});break;
+    case 'RIBBONZ':m=new THREE.MeshPhysicalMaterial({color:lin(0.011,0.0092,0.0092),metalness:0,roughness:1,specularIntensity:0.275});break;
+    case 'Material.026':m=new THREE.MeshPhysicalMaterial({color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667,ior:1.5});break;
+    case 'Material.029':m=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:0,roughness:1});break;
+    default:console.warn('[ad] unknown material',mname);m=new THREE.MeshPhysicalMaterial({color:0xff00ff});
+  }
+  m.name=mname;
+  /* Transmissive parts MUST stay DoubleSide: their back faces are what the
+     transmission pass sees, and that is where the liquid's pink comes from.
+     Measured with FrontSide: the liquid washes out (green 0.47 -> 0.83).
+     The bow is open planes, so it needs both faces too. Only the opaque
+     closed parts (chrome, label) can drop to FrontSide. */
+  const OPEN=['RIBBONZ','Material.026','Material.029','Ribbon.001'];
+  m.side=(SIDES==='all'||m.transmission>0||OPEN.includes(mname))?THREE.DoubleSide:THREE.FrontSide;
+  const mask=maskFor(objName),patch=PATCH[mname];
+  if(patch) m.defines={USE_UV:''};
+  m.onBeforeCompile=sh=>{
+    let f=sh.fragmentShader;
+    const lfb=THREE.ShaderChunk.lights_fragment_begin.replace('rectAreaLight = rectAreaLights[ i ];','rectAreaLight = rectAreaLights[ i ]; rectAreaLight.color *= LLMASK[ i ];');
+    if(lfb===THREE.ShaderChunk.lights_fragment_begin) console.warn('[ad] light-link hook failed');
+    f=f.replace('#include <lights_fragment_begin>',lfb);
+    f=`uniform float LLMASK[${mask.length}];\n`+f;
+    sh.uniforms.LLMASK={value:mask};
+    if(patch){
+      f=f.replace('void main() {',patch.head+'\nvoid main() {');
+      if(patch.color) f=f.replace('#include <color_fragment>','#include <color_fragment>\n'+patch.color);
+      if(patch.rough) f=f.replace('#include <roughnessmap_fragment>','#include <roughnessmap_fragment>\n'+patch.rough);
+      if(patch.normal) f=f.replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+patch.normal);
+    }
+    sh.fragmentShader=f;
+  };
+  m.customProgramCacheKey=()=>mname;   /* the mask is a uniform now, so parts can share a program */
+  return m;
+}
+
+const bottle=gltf.scene;
+const tiltRoot=new THREE.Group();tiltRoot.position.copy(PIVOT);scene.add(tiltRoot);
+bottle.position.copy(PIVOT).negate();tiltRoot.add(bottle);
+const AUTOMAP=new Set([' base glass.002','inner part.002','label.002','spray cap.002'].map(san));
+bottle.traverse(o=>{
+  if(!o.isMesh) return;
+  const objName=((o.parent&&o.parent.type==='Group'&&o.parent!==bottle)?o.parent.name:o.name).replace(/__w(_\d+)?$/,'');
+  const g=o.geometry; if(AUTOMAP.has(objName)&&g.attributes.uv1) g.setAttribute('uv',g.attributes.uv1);   /* Blender's active render UV */
+  o.material=makeMat(o.material.name,objName);
+  if(o.material.name==='Material.021') o.renderOrder=100;   /* after the glass */
+});
+
+/* ---- model tilt: same rig as before, now on the bottle's pivot ---- */
+const _yawAxis=new THREE.Vector3(0,1,0),_pitchAxis=new THREE.Vector3(1,0,0);
+const _yawQ=new THREE.Quaternion(),_pitchQ=new THREE.Quaternion();
+function applyModelTilt(u,v){
+  _yawQ.setFromAxisAngle(_yawAxis,u*THREE.MathUtils.degToRad(MAX_YAW_DEG));
+  _pitchQ.setFromAxisAngle(_pitchAxis,v*THREE.MathUtils.degToRad(MAX_PITCH_DEG));
+  tiltRoot.quaternion.copy(_yawQ).multiply(_pitchQ);
+}
+
+/* ---- sizing: identical frustum rule ---- */
+function resize(){
+  const w=ad.clientWidth,h=ad.clientHeight; if(!w||!h) return;
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.fov=THREE.MathUtils.radToDeg(2*Math.atan(Math.tan(H_FOV_RAD/2)/camera.aspect));
+  camera.updateProjectionMatrix();
+}
+resize(); window.addEventListener('resize',resize);
+if('ResizeObserver' in window) new ResizeObserver(resize).observe(ad);
+
+/* Compile every shader in parallel before the first frame instead of letting
+   the first render block the main thread on each one in turn. */
+if(renderer.compileAsync){ try{ await renderer.compileAsync(scene,camera); }catch(e){ console.warn('[ad] compileAsync',e); } }
+let first=true,fps=0,fpsN=0,fpsT=performance.now();
+function tick(){
+  requestAnimationFrame(tick);
+  const tu=motionEnabled?targetU:0, tv=motionEnabled?targetV:0;
+  currentU+=(tu-currentU)*EASE; currentV+=(tv-currentV)*EASE;
+  applyModelTilt(currentU,currentV);
+  renderer.render(scene,camera);
+  if(first){first=false;requestAnimationFrame(()=>{loadedAt=performance.now();loaderEl.classList.add('hidden');});}
+  /* Load time and fps are no longer drawn over the ad; read them from the
+     console with __ad.loadSeconds and __ad.fps when measuring. */
+  if(loadedAt!==null&&loadedAt>0){
+    fpsN++; const now=performance.now();
+    if(now-fpsT>=500){ fps=fpsN*1000/(now-fpsT); fpsN=0; fpsT=now; }
+  }
+}
+requestAnimationFrame(tick);
+
+window.__ad={
+  THREE,scene,camera,renderer,rig,bottle,tiltRoot,
+  get loadSeconds(){return loadedAt===null?null:+(loadedAt/1000).toFixed(2);},
+  get fps(){return +fps.toFixed(1);},
+  setExposure(v){renderer.toneMappingExposure=v;return v;},
+  setEnv(v){scene.environmentIntensity=v;return v;},
+  setGain(g){for(const l of rig) l.intensity=l.userData.baseIntensity*g;return g;},
+  lights(){return rig.map(l=>[l.name,+l.intensity.toFixed(3)]);},
+  motion(on=true){motionEnabled=on;return on?'motion on':'motion off';},
+  recenter(){neutralBeta=null;neutralGamma=null;targetU=0;targetV=0;return 'reset';},
+  tilt(){return {yawDeg:+(currentU*MAX_YAW_DEG).toFixed(3),pitchDeg:+(currentV*MAX_PITCH_DEG).toFixed(3),
+                 source:gyroActive?'gyro':(pointerActive?'pointer':'none')};},
+  setTiltRange(y,p){if(typeof y==='number')MAX_YAW_DEG=y;if(typeof p==='number')MAX_PITCH_DEG=p;return {MAX_YAW_DEG,MAX_PITCH_DEG};},
+  setInputRange(d){INPUT_RANGE_DEG=d;return d;},
+  mat(name,props){let n=0;scene.traverse(o=>{if(o.isMesh&&o.material.name===name){Object.assign(o.material,props);o.material.needsUpdate=true;n++;}});return n;},
+  mats(){const s=new Set();scene.traverse(o=>{if(o.isMesh)s.add(o.material.name);});return [...s].sort();},
+};
+</script>
+</body>
+</html>

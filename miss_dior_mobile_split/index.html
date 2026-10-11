@@ -754,7 +754,7 @@ else {prompt.classList.add('hidden');}
 /* ===================================================================
    LOADING - byte progress + wall clock from navigation start
    =================================================================== */
-const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png',(new URLSearchParams(location.search).get('model')==='hi'?'bottle_hi.glb':'bottle.glb'),'tex/ribbon_normal.jpg'];
+const ASSETS=['scene.json','filmic_lut.json','bg.png','env.hdr','tex/pattern_color.png','tex/pattern_rough.png','tex/pattern_bump.png','tex/label_baked.png',({hi:'bottle_hi.glb',new:'bottle_new.glb'}[new URLSearchParams(location.search).get('model')]||'bottle.glb'),'tex/ribbon_normal.jpg'];
 let total=0,got=0,heads=0,phase='download',loadedAt=null;
 /* Any failed load (bad asset, decoder, shader) must show on screen, not leave the timer running. */
 window.addEventListener('unhandledrejection',e=>{if(loadedAt!==null)return;loadedAt=-1;
@@ -911,7 +911,7 @@ const texP=Promise.all(['tex/pattern_color.png','tex/pattern_rough.png','tex/pat
 
 /* ---- bottle: decode in parallel with the textures ---- */
 const draco=new DRACOLoader().setDecoderPath('/miss_dior_mobile_split/vendor/jsm/libs/draco/gltf/');
-const gltfP=blobURL((QS.get('model')==='hi'?'bottle_hi.glb':'bottle.glb')).then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
+const gltfP=blobURL(({hi:'bottle_hi.glb',new:'bottle_new.glb'}[QS.get('model')]||'bottle.glb')).then(u=>new GLTFLoader().setDRACOLoader(draco).loadAsync(u));
 const [[patColor,patRough,houndBump,labelTex,ribN],gltf]=await Promise.all([texP,gltfP,envP]);
 ribN.repeat.set(4.56,4.56*Math.cos(0.281));
 
@@ -944,7 +944,8 @@ function makeMat(mname,objName){
     case 'Water 02.002':m=new THREE.MeshPhysicalMaterial({color:lin(1.1,0.0491,0.3198),specularColor:lin(1.05,0.5245,0.6599),roughness:0,metalness:0,transmission:1,ior:1.45,thickness:0.4,
       emissive:lin(1.1,0.0491,0.3198),emissiveIntensity:0.01});break;
     case 'Material.020':m=new THREE.MeshPhysicalMaterial({color:lin(0.8,0.8,0.8),metalness:1,roughness:0.1});break;
-    case 'Material.021':m=new THREE.MeshPhysicalMaterial({color:0xffffff,map:labelTex,metalness:0.6227,roughness:0.3964});break;
+    case 'Material.021':m=new THREE.MeshPhysicalMaterial({color:0xffffff,map:labelTex,metalness:0.6227,roughness:0.3964});
+      m.side=THREE.DoubleSide; break;   /* real geometry in front of the glass - no overlay trick needed */
     case 'Ribbon.001':m=new THREE.MeshPhysicalMaterial({color:lin(0.0018,0.0018,0.0018),metalness:0.2909,roughness:0.9132,normalMap:ribN,normalScale:new THREE.Vector2(0.74,0.74)});break;
     case 'RIBBONZ':m=new THREE.MeshPhysicalMaterial({color:lin(0.011,0.0092,0.0092),metalness:0,roughness:1,specularIntensity:0.275});break;
     case 'Material.026':m=new THREE.MeshPhysicalMaterial({color:lin(0.0083,0.0083,0.0083),metalness:0,roughness:0.6667,ior:1.5});break;
@@ -980,15 +981,78 @@ function makeMat(mname,objName){
   return m;
 }
 
+/* ---- corrections for the re-export (?model=new) -------------------------
+   The re-export is uniformly scaled to 94.04% of the original and shifted,
+   which would lift the bottle ~51px off the shadow and caustics baked into
+   the pre-rendered background. Measured against the designer's first export
+   (which matches the Cycles render) across every part: one uniform scale and
+   one translation put all of them back within a fraction of a pixel.
+   The label was also moved to the BACK glass wall rather than the front, so
+   it is pushed forward to sit just proud of the front face.
+   None of this is needed once the source file is corrected. */
+/* ---- label to the front, on the already-approved geometry -----------------
+   The label sits ~0.03 behind the front glass in the .blend, so the renderer
+   refracts it and it reads as being inside the bottle. Slide it forward along
+   Z until it sits just proud of the front face. Unlike the re-export, this
+   model's printed face already points at the camera, so no flip is needed. */
+function labelToFront(root,proud){
+  const lbl=root.getObjectByName('label002__w')||root.getObjectByName('label002');
+  if(!lbl){ console.warn('[ad] label node not found'); return; }
+  root.updateMatrixWorld(true);
+  let frontZ=-Infinity;
+  root.traverse(o=>{ if(o.isMesh&&o.material&&/glass\.004|with pattern/.test(o.material.name))
+    frontZ=Math.max(frontZ,new THREE.Box3().setFromObject(o).max.z); });
+  const lz=new THREE.Box3().setFromObject(lbl).max.z;
+  lbl.position.z += (frontZ+proud)-lz;
+  root.updateMatrixWorld(true);
+}
+const MODELFIX={scale:1.06339,offset:new THREE.Vector3(0.01651,-0.05497,-0.02797),labelProud:0.0019};
+if(QS.get('model')==='new'){
+  const lbl=gltf.scene.getObjectByName('label002');
+  if(!lbl) console.warn('[ad] label node not found');
+  else {
+    /* The re-export turns the label slab around: its printed face (the one whose
+       UVs cover the artwork) points INTO the bottle, and the blank back of the
+       slab faces the camera - which is why the label vanished. Spin it 180 deg
+       about its own vertical axis, then sit it just proud of the front glass. */
+    gltf.scene.updateMatrixWorld(true);
+    const c=new THREE.Box3().setFromObject(lbl).getCenter(new THREE.Vector3());
+    const pivot=new THREE.Group(); pivot.position.copy(c); gltf.scene.add(pivot);
+    lbl.position.sub(c); pivot.add(lbl); pivot.rotation.y=Math.PI;
+    gltf.scene.updateMatrixWorld(true);
+    let frontZ=-Infinity;
+    gltf.scene.traverse(o=>{ if(o.isMesh&&o.material&&/glass\.004|with pattern/.test(o.material.name))
+      frontZ=Math.max(frontZ,new THREE.Box3().setFromObject(o).max.z); });
+    const lz=new THREE.Box3().setFromObject(lbl).max.z;
+    pivot.position.z += (frontZ+MODELFIX.labelProud) - lz;
+    gltf.scene.updateMatrixWorld(true);
+  }
+  gltf.scene.scale.multiplyScalar(MODELFIX.scale);
+  gltf.scene.position.copy(MODELFIX.offset);
+  gltf.scene.updateMatrixWorld(true);
+}
+if(QS.get('model')!=='new'&&QS.get('label')!=='back') labelToFront(gltf.scene,0.002);
 const bottle=gltf.scene;
 const tiltRoot=new THREE.Group();tiltRoot.position.copy(PIVOT);scene.add(tiltRoot);
-bottle.position.copy(PIVOT).negate();tiltRoot.add(bottle);
-const AUTOMAP=new Set([' base glass.002','inner part.002','label.002','spray cap.002'].map(san));
+bottle.position.sub(PIVOT);tiltRoot.add(bottle);
+/* The textured materials all sample Blender's second (automap) UV. Keying this
+   off object names broke when the designer renamed objects on re-export, so
+   prefer uv1 wherever a mesh has one - meshes with a single UV are untouched. */
 bottle.traverse(o=>{
   if(!o.isMesh) return;
   const objName=((o.parent&&o.parent.type==='Group'&&o.parent!==bottle)?o.parent.name:o.name).replace(/__w(_\d+)?$/,'');
-  const g=o.geometry; if(AUTOMAP.has(objName)&&g.attributes.uv1) g.setAttribute('uv',g.attributes.uv1);   /* Blender's active render UV */
+  const g=o.geometry; if(g.attributes.uv1) g.setAttribute('uv',g.attributes.uv1);   /* Blender's active render UV */
   o.material=makeMat(o.material.name,objName);
+  if(o.material.name==='Material.021'){
+    /* The glass samples a render of the scene to do its refraction, and the
+       label is in that render - so once the label sits in FRONT of the glass
+       you see it twice: the real one, plus a washed-out refracted copy inside
+       the bottle. Drop it out of that pass only (render target non-null),
+       writing neither colour nor depth, so the glass refracts what is actually
+       behind it. The main pass is untouched. */
+    o.onBeforeRender=(r)=>{ if(r.getRenderTarget()!==null){ o.material.colorWrite=false; o.material.depthWrite=false; } };
+    o.onAfterRender=()=>{ o.material.colorWrite=true; o.material.depthWrite=true; };
+  }
 });
 
 /* ---- model tilt: same rig as before, now on the bottle's pivot ---- */
